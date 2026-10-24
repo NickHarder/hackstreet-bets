@@ -20,6 +20,7 @@
       <a href="#/leaderboard" data-nav="leaderboard">Leaderboard</a>
       <a href="#/portfolio" data-nav="portfolio">Portfolio</a>
       <a href="#/activity" data-nav="activity">Activity</a>
+      <a href="#/create" data-nav="create" id="nav-create">+ Create</a>
       <a href="#/admin" data-nav="admin" id="nav-admin" hidden>Admin</a>
     </nav>
     <div class="topbar-right" id="topbar-right"></div>
@@ -29,7 +30,7 @@
 <main class="container" id="app"></main>
 <footer class="footer container">
   <span>Play money only. Nothing here is real, except the bragging.</span>
-  <button class="link" data-action="suggest">Suggest a market</button>
+  <button class="link" data-action="suggest" id="footer-cta">Suggest a market</button>
 </footer>
 
 <dialog id="authDialog" closedby="any" aria-labelledby="authTitle">
@@ -55,6 +56,19 @@
     <div class="dialog-actions">
       <button type="button" class="btn ghost" data-action="close-dialog">Cancel</button>
       <button type="submit" class="btn primary">Send it</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="flagDialog" closedby="any" aria-labelledby="flagTitle">
+  <form id="flagForm" class="dialog-form" method="dialog">
+    <h2 id="flagTitle">Report a problem</h2>
+    <p class="muted">Wrong result, unclear rules, someone betting with inside info? Tell the admins. They can fix the result, or void the market and refund everyone.</p>
+    <label>What's off? <textarea name="reason" rows="3" required minlength="3" maxlength="300" placeholder="e.g. The food actually arrived at 6:58, I have a photo"></textarea></label>
+    <p class="form-error" id="flagError" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="btn primary">Send report</button>
     </div>
   </form>
 </dialog>

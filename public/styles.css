@@ -69,18 +69,19 @@ p { margin: 0; }
 .brand-name { font-weight: 800; letter-spacing: -0.02em; }
 .brand-event { font-size: 0.72rem; color: var(--muted); }
 .nav { display: flex; gap: 2px; margin-left: 8px; }
-.nav a { padding: 8px 12px; border-radius: 999px; color: var(--text-2); font-weight: 500; }
+.nav a { padding: 8px 12px; border-radius: 999px; color: var(--text-2); font-weight: 500; white-space: nowrap; }
 .nav a:hover { background: var(--surface-2); color: var(--text); }
 .nav a.active { background: var(--surface-3); color: var(--text); }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.balance-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px 6px 8px; font-weight: 600; }
+.balance-pill { white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px 6px 8px; font-weight: 600; }
 .balance-pill .lbl { color: var(--muted); font-weight: 500; font-size: 0.8rem; }
 .avatar { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; font-weight: 700; font-size: 0.8rem; color: #fff; text-transform: uppercase; flex-shrink: 0; }
 .avatar.lg { width: 44px; height: 44px; font-size: 1.1rem; }
 .user-chip { display: inline-flex; align-items: center; gap: 8px; background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px 4px 4px; }
 .user-chip .name { font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-@media (max-width: 760px) {
+@media (max-width: 1180px) { .brand-event { display: none; } .nav a { padding: 8px 9px; } .balance-pill.cash { display: none; } }
+@media (max-width: 1040px) {
   .topbar-inner { flex-wrap: wrap; gap: 8px 12px; padding-block: 8px; }
   .brand-event { display: none; }
   .nav { order: 3; width: 100%; margin: 0; overflow-x: auto; scrollbar-width: none; }
@@ -154,10 +155,13 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px); }
 dialog:has(.wide) { width: min(620px, calc(100vw - 32px)); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
-/* ---------- toasts (popover="manual") ---------- */
-.toast { position: fixed; inset: auto 16px 16px auto; margin: 0; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); border-radius: 12px; padding: 12px 14px; align-items: center; gap: 12px; max-width: min(380px, calc(100vw - 32px)); box-shadow: var(--shadow); font-size: 0.92rem; opacity: 0; transform: translateY(8px); transition: opacity 0.2s, transform 0.2s, bottom 0.2s, overlay 0.2s allow-discrete, display 0.2s allow-discrete; }
-.toast:is(:popover-open, .fallback) { opacity: 1; transform: none; display: flex; }
-@starting-style { .toast:is(:popover-open, .fallback) { opacity: 0; transform: translateY(8px); } }
+/* ---------- toasts (one popover="manual" host) ---------- */
+#toasts { position: fixed; inset: auto 16px 16px auto; z-index: 100; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+#toasts[popover]:not(:popover-open) { display: none; }
+.toast { pointer-events: auto; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; max-width: 100%; box-shadow: var(--shadow); font-size: 0.92rem; animation: toastIn 0.2s ease-out; transition: opacity 0.2s, transform 0.2s; }
+.toast.leaving { opacity: 0; transform: translateY(8px); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; transition: none; } }
 .toast.ok { border-color: rgba(34, 199, 129, 0.5); }
 .toast.err { border-color: rgba(255, 107, 107, 0.5); }
 .toast-x { margin-left: auto; background: none; border: 0; color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 2px 4px; }
@@ -367,3 +371,17 @@ tr:last-child td { border-bottom: 0; }
 .inline-form { display: flex; gap: 8px; align-items: center; }
 .inline-form input { width: 110px; padding: 6px 10px; }
 code { font-family: var(--mono); font-size: 0.85em; background: var(--surface-3); padding: 1px 6px; border-radius: 6px; }
+
+/* ---------- player markets, reports, admin card ---------- */
+.byline { display: inline-flex; align-items: center; gap: 6px; }
+.avatar.sm { width: 20px; height: 20px; font-size: 0.65rem; }
+.flags { border-color: rgba(250, 178, 25, 0.4); }
+.market-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.admin-card { border-color: rgba(144, 133, 233, 0.45); }
+.admin-card h3 { color: #b7aef5; }
+.admin-card .resolve-box { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.admin-card select { flex: 1; min-width: 0; padding: 7px 10px; }
+.admin-card .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.admin-row .flagbox { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; background: rgba(250, 178, 25, 0.08); border: 1px solid rgba(250, 178, 25, 0.3); padding: 10px; border-radius: 10px; font-size: 0.85rem; }
+.admin-row .flagbox .hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; color: var(--warn); }
+.create-intro { margin: 6px 0 16px; max-width: 70ch; }

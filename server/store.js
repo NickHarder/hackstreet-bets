@@ -15,6 +15,7 @@ export function defaultSettings() {
     prizeText: 'First place on the leaderboard when the hackathon ends wins eternal bragging rights (and a prize the organizers will announce).',
     startingBalance: 1000,
     currency: '$',
+    allowUserMarkets: true,
   };
 }
 

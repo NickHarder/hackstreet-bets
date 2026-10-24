@@ -68,33 +68,34 @@ async function api(path, opts = {}) {
   return data;
 }
 
-// ------------------------------------------------------------ toasts (popover="manual")
+// ------------------------------------------------------------ toasts
+// One popover="manual" host holds the stack, so the browser lays toasts out
+// (no overlap) and re-showing the host lifts it above any open dialog.
 const hasPopover = 'popover' in HTMLElement.prototype;
-const toasts = [];
+const toastHost = document.createElement('div');
+toastHost.id = 'toasts';
+if (hasPopover) toastHost.popover = 'manual';
+document.body.appendChild(toastHost);
+function showHost() {
+  if (!hasPopover) return;
+  try { if (toastHost.matches(':popover-open')) toastHost.hidePopover(); toastHost.showPopover(); } catch { /* */ }
+}
 function toast(msg, kind = 'ok', ms = 3800) {
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
   el.setAttribute('role', kind === 'err' ? 'alert' : 'status');
-  if (hasPopover) el.popover = 'manual';
   el.innerHTML = `<span>${msg}</span><button class="toast-x" aria-label="Dismiss">×</button>`;
-  document.body.appendChild(el);
+  let gone = false;
   const close = () => {
-    const i = toasts.indexOf(el); if (i >= 0) toasts.splice(i, 1);
-    if (hasPopover) { try { el.hidePopover(); } catch { /* */ } } else el.classList.remove('fallback');
-    setTimeout(() => el.remove(), 250);
-    restack();
+    if (gone) return; gone = true;
+    el.classList.add('leaving');
+    setTimeout(() => { el.remove(); if (!toastHost.children.length && hasPopover) { try { toastHost.hidePopover(); } catch { /* */ } } }, 200);
   };
   el.querySelector('.toast-x').addEventListener('click', close);
-  toasts.unshift(el);
-  restack();
-  if (hasPopover) el.showPopover(); else el.classList.add('fallback');
-  restack();
+  toastHost.prepend(el);
+  while (toastHost.children.length > 4) toastHost.lastElementChild.remove();
+  showHost();
   setTimeout(close, ms);
-}
-function restack() {
-  while (toasts.length > 4) toasts.pop().remove();
-  let off = 16;
-  toasts.forEach((t) => { t.style.bottom = `${off}px`; off += (t.offsetHeight || 56) + 8; });
 }
 
 // ------------------------------------------------------------ dialogs
@@ -119,10 +120,14 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-action="close-dialog"]');
   if (btn) btn.closest('dialog').close();
   if (e.target.closest('[data-action="suggest"]')) {
+    if (canCreate()) { location.hash = '#/create'; return; }
     if (!S.me) { requireLogin(); return; }
     openDialog('suggestDialog');
   }
+  if (e.target.closest('[data-action="suggest-dialog"]')) { if (!S.me) { requireLogin(); return; } openDialog('suggestDialog'); }
+  if (e.target.closest('[data-action="flag"]')) { if (!S.me) { requireLogin(); return; } $('#flagError').hidden = true; openDialog('flagDialog'); }
 });
+const canCreate = () => !!(S.settings.allowUserMarkets || S.me?.user.isAdmin);
 function requireLogin() { $('#authError').hidden = true; openDialog('authDialog'); return false; }
 
 $('#authForm').addEventListener('submit', async (e) => {
@@ -139,6 +144,13 @@ $('#authForm').addEventListener('submit', async (e) => {
     renderTopbar(); render();
   } catch (ex) { err.textContent = ex.message; err.hidden = false; }
 });
+$('#flagForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target; const err = $('#flagError'); err.hidden = true;
+  if (!S.detail) return;
+  try { await api(`/api/markets/${S.detail.market.id}/flag`, { body: { reason: f.reason.value } }); f.reset(); $('#flagDialog').close(); toast('Reported. The admins will take a look.'); }
+  catch (ex) { err.textContent = ex.message; err.hidden = false; }
+});
 $('#suggestForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target; const err = $('#suggestError'); err.hidden = true;
@@ -152,11 +164,13 @@ function renderTopbar() {
   document.title = `HackStreet Bets · ${S.settings.eventName || ''}`;
   $('#authStart').textContent = money(S.settings.startingBalance, { dp: 0 });
   $('#nav-admin').hidden = !S.me;
+  $('#nav-create').hidden = !canCreate();
+  $('#footer-cta').textContent = canCreate() ? 'Create a market' : 'Suggest a market';
   const right = $('#topbar-right');
   if (!S.me) { right.innerHTML = `<button class="btn primary sm" data-action="login">Sign in to bet</button>`; return; }
   const u = S.me.user;
   right.innerHTML = `
-    <a class="balance-pill" href="#/portfolio" title="Cash available"><span class="lbl">Cash</span><span class="num">${money(u.balance)}</span></a>
+    <a class="balance-pill cash" href="#/portfolio" title="Cash available"><span class="lbl">Cash</span><span class="num">${money(u.balance)}</span></a>
     <a class="balance-pill" href="#/portfolio" title="Cash + current value of open positions"><span class="lbl">Net worth</span><span class="num ${pnlCls(S.me.pnl)}">${money(S.me.netWorth)}</span></a>
     <button class="user-chip" data-action="account" title="Signed in as ${esc(u.name)}. Click to sign out.">${avatar(u)}<span class="name">${esc(u.name)}</span></button>`;
 }
@@ -197,6 +211,7 @@ function render() {
   if (r.name === 'portfolio') return renderPortfolio();
   if (r.name === 'activity') return renderActivity();
   if (r.name === 'admin') return renderAdmin();
+  if (r.name === 'create') return renderCreate();
   app.innerHTML = '<div class="empty">Nothing here. <a class="link" href="#/">Back to markets</a></div>';
 }
 
@@ -236,7 +251,7 @@ function cardBody(m) {
 function marketCard(m) {
   const right = m.status === 'open' ? (m.closesAt ? `<span class="right">${until(m.closesAt)}</span>` : '') : `<span class="right">${statusPill(m)}</span>`;
   return `<article class="card market-card ${m.status === 'open' ? '' : 'dim'}" data-open="${m.id}" id="mc-${m.id}">
-    <div class="card-top">${m.live && m.status === 'open' ? '<span class="live-badge"><span class="live-dot"></span>LIVE</span>' : ''}<span class="pill cat">${esc(m.category)}</span>${right}</div>
+    <div class="card-top">${m.live && m.status === 'open' ? '<span class="live-badge"><span class="live-dot"></span>LIVE</span>' : ''}<span class="pill cat">${esc(m.category)}</span>${m.flags?.length && m.status !== 'voided' ? '<span class="pill closed">⚠ reported</span>' : ''}${right}</div>
     <h3>${esc(m.title)}</h3>
     ${cardBody(m)}
     <div class="card-foot"><span>${money(m.volume, { dp: 0 })} vol</span><span>${m.traders} trader${m.traders === 1 ? '' : 's'}</span>${sparkSvg(m)}</div>
@@ -332,7 +347,7 @@ async function renderMarket(id) {
         <div class="market-head">
           <div class="pills">${m.live && m.status === 'open' ? '<span class="live-badge"><span class="live-dot"></span>LIVE</span>' : ''}<span class="pill cat">${esc(m.category)}</span>${statusPill(m)}</div>
           <h1>${esc(m.title)}</h1>
-          <div class="meta"><span><b>${money(m.volume, { dp: 0 })}</b> volume</span><span><b>${m.traders}</b> traders</span><span><b>${m.tradeCount}</b> trades</span>${m.closesAt ? `<span>${m.status === 'open' ? `Closes ${fmtTime(m.closesAt)} · <b>${until(m.closesAt)}</b>` : `Closed ${fmtTime(Math.min(m.closesAt, m.resolvedAt || m.closesAt))}`}</span>` : ''}</div>
+          <div class="meta">${m.createdBy ? `<span class="byline">by ${avatar(m.createdBy, 'sm')}<b>${esc(m.createdBy.name)}</b></span>` : ''}<span><b>${money(m.volume, { dp: 0 })}</b> volume</span><span><b>${m.traders}</b> traders</span><span><b>${m.tradeCount}</b> trades</span>${m.closesAt ? `<span>${m.status === 'open' ? `Closes ${fmtTime(m.closesAt)} · <b>${until(m.closesAt)}</b>` : `Closed ${fmtTime(Math.min(m.closesAt, m.resolvedAt || m.closesAt))}`}</span>` : ''}</div>
         </div>
         ${banner}
         <div class="card chart-card">
@@ -343,10 +358,17 @@ async function renderMarket(id) {
         <div class="section-head"><h2>Outcomes</h2><span class="muted small">Price = chance the crowd gives it. Pays ${cur()}1 per share if it wins.</span></div>
         <div class="outcomes">${sorted.map((o) => outcomeRow(m, o, position)).join('')}</div>
         ${m.description ? `<div class="section-head"><h2>Rules</h2></div><div class="card"><p style="white-space:pre-wrap">${esc(m.description)}</p></div>` : ''}
+        ${m.flags?.length ? `<div class="section-head"><h2>⚠️ Reported issues</h2><span class="muted small">Admins review these and can fix the result or void the market</span></div>
+          <div class="card flags"><div class="trade-list">${m.flags.map((f) => `<div class="trade-item">${avatar(f.user)}<div class="what"><b>${esc(f.user?.name)}</b>: ${esc(f.reason)}</div><span class="when">${ago(f.t)}</span></div>`).join('')}</div></div>` : ''}
+        <div class="market-actions">
+          ${m.status !== 'voided' ? '<button class="btn sm ghost" data-action="flag">⚠️ Report a problem</button>' : ''}
+          ${S.me && m.createdBy?.id === S.me.user.id && m.tradeCount === 0 && m.status === 'open' ? '<button class="btn sm danger" data-action="cancel-market">Delete my market</button>' : ''}
+        </div>
       </div>
       <aside class="trade-col">
         <div class="card trade-panel" id="tradePanel"></div>
         <div id="positionBox"></div>
+        ${S.me?.user.isAdmin ? adminCard(m) : ''}
       </aside>
       <section class="trades-area">
         <div class="section-head"><h2>Recent trades</h2></div>
@@ -370,6 +392,26 @@ function outcomeRow(m, o, position) {
     <span class="track"><span class="fill" style="display:block;width:${(o.price * 100).toFixed(1)}%;background:${o.color}"></span></span>
   </button>`;
 }
+
+function adminCard(m) {
+  const unsettled = m.status === 'open' || m.status === 'closed';
+  return `<div class="card admin-card"><h3>🛡️ Admin</h3>
+    ${unsettled ? `<div class="resolve-box"><select data-rsel="${m.id}" aria-label="Winning outcome">${m.outcomes.map((o) => `<option value="${o.id}">${esc(o.name)} (${pct(o.price)})</option>`).join('')}</select><button class="btn sm primary" data-aresolve="${m.id}">Resolve</button></div>` : ''}
+    <div class="acts">
+      ${m.status === 'open' ? `<button class="btn sm" data-aclose="${m.id}">Close trading</button>` : ''}
+      ${m.status === 'closed' ? `<button class="btn sm" data-areopen="${m.id}">Reopen</button>` : ''}
+      ${m.status === 'resolved' || m.status === 'voided' ? `<button class="btn sm" data-aunresolve="${m.id}">Undo result</button>` : ''}
+      ${m.status !== 'voided' ? `<button class="btn sm danger" data-avoid="${m.id}">Void</button>` : ''}
+      <button class="btn sm" data-aedit="${m.id}">Edit</button>
+      ${m.flags?.length ? `<button class="btn sm" data-aclearflags="${m.id}">Clear reports</button>` : ''}
+    </div></div>`;
+}
+document.addEventListener('click', async (e) => {
+  if (!e.target.closest('[data-action="cancel-market"]') || !S.detail) return;
+  if (!confirm('Delete your market? Nobody has bet on it yet, so nothing is lost.')) return;
+  try { await api(`/api/markets/${S.detail.market.id}`, { method: 'DELETE' }); toast('Market deleted.'); location.hash = '#/'; }
+  catch (ex) { toast(esc(ex.message), 'err'); }
+});
 
 function tradeLine(t) {
   const verb = t.side === 'buy' ? 'bought' : 'sold';
@@ -650,7 +692,9 @@ function feedLine(f) {
   const mk = f.marketId ? `<a class="link" href="#/m/${f.marketId}">${esc(f.marketTitle)}</a>` : '';
   let ic = '•', body = '';
   if (f.kind === 'trade') { ic = f.side === 'buy' ? '💸' : '💰'; body = `<b>${esc(f.user?.name)}</b> ${f.side === 'buy' ? 'bet' : 'cashed out'} ${money(f.cost)} ${f.side === 'buy' ? 'on' : 'from'} <b style="color:${f.outcomeColor}">${esc(f.outcomeName)}</b> <span class="muted">@ ${cents(f.price)}</span><span class="mk">${mk}</span>`; }
-  else if (f.kind === 'new_market') { ic = '🆕'; body = `New market: ${mk}`; }
+  else if (f.kind === 'new_market') { ic = '🆕'; body = f.user ? `<b>${esc(f.user.name)}</b> created a market: ${mk}` : `New market: ${mk}`; }
+  else if (f.kind === 'flag') { ic = '⚠️'; body = `<b>${esc(f.user?.name)}</b> reported a problem with ${mk}<span class="mk">“${esc(f.note)}”</span>`; }
+  else if (f.kind === 'unresolved') { ic = '↩️'; body = `Admins undid the result of ${mk}. Payouts were reversed.`; }
   else if (f.kind === 'resolved') { ic = '🏁'; body = `${mk} resolved to <b style="color:${f.outcomeColor}">${esc(f.outcomeName)}</b>`; }
   else if (f.kind === 'voided') { ic = '🚫'; body = `${mk} was voided and refunded`; }
   else if (f.kind === 'joined') { ic = '👋'; body = `<b>${esc(f.user?.name)}</b> joined with ${money(f.amount, { dp: 0 })}`; }
@@ -684,8 +728,9 @@ async function renderAdmin() {
     });
     return;
   }
-  const tabs = [['markets', 'Markets'], ['create', 'Create market'], ['players', 'Players'], ['ideas', 'Suggestions'], ['settings', 'Prize & settings']];
-  app.innerHTML = `<h1 style="margin-bottom:14px">Admin</h1><div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${S.adminTab === k}" class="${S.adminTab === k ? 'active' : ''}" data-atab="${k}">${l}</button>`).join('')}</div><div id="adminBody"></div>`;
+  const tabs = [['markets', 'Markets'], ['players', 'Players'], ['ideas', 'Suggestions'], ['settings', 'Prize & settings']];
+  if (S.adminTab === 'create') S.adminTab = 'markets';
+  app.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px"><h1>Admin</h1><a class="btn primary sm" href="#/create">+ New market</a></div><div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${S.adminTab === k}" class="${S.adminTab === k ? 'active' : ''}" data-atab="${k}">${l}</button>`).join('')}</div><div id="adminBody"></div>`;
   renderAdminBody();
 }
 
@@ -693,34 +738,23 @@ async function renderAdminBody() {
   const body = $('#adminBody'); if (!body) return;
   const t = S.adminTab;
   if (t === 'markets') {
-    const ms = [...S.markets.values()].sort((a, b) => ({ open: 0, closed: 1, resolved: 2, voided: 3 }[a.status] - { open: 0, closed: 1, resolved: 2, voided: 3 }[b.status]) || b.createdAt - a.createdAt);
-    body.innerHTML = `<p class="muted small" style="margin-bottom:10px">Close a market when the answer becomes obvious (stops late snipes), then resolve it to pay out winners. Void refunds everyone.</p><div class="card" style="padding:4px 16px">${ms.map((m) => `
+    const ord = { open: 1, closed: 0, resolved: 2, voided: 3 };
+    const ms = [...S.markets.values()].sort((a, b) => ((b.flags?.length && b.status !== 'voided') - (a.flags?.length && a.status !== 'voided')) || (ord[a.status] - ord[b.status]) || b.createdAt - a.createdAt);
+    body.innerHTML = `<p class="muted small" style="margin-bottom:10px">Admins have the final say. Close a market when the answer becomes obvious, then resolve it to pay out. Got it wrong? Undo the result and resolve again. Anything fishy? Void refunds everyone as if no bets happened. Reported markets float to the top.</p><div class="card" style="padding:4px 16px">${ms.map((m) => `
       <div class="admin-row">
         <div><div class="ttl">${statusPill(m)} ${m.live ? '<span class="pill">live</span>' : ''} ${m.featured ? '<span class="pill">featured</span>' : ''} <a href="#/m/${m.id}">${esc(m.title)}</a></div>
-          <div class="sub">${esc(m.category)} · ${money(m.volume, { dp: 0 })} vol · ${m.tradeCount} trades · liquidity ${m.b}${m.closesAt ? ` · closes ${fmtTime(m.closesAt)}` : ''}</div></div>
+          <div class="sub">${m.createdBy ? `by ${esc(m.createdBy.name)} · ` : ''}${esc(m.category)} · ${money(m.volume, { dp: 0 })} vol · ${m.tradeCount} trades · liquidity ${m.b}${m.closesAt ? ` · closes ${fmtTime(m.closesAt)}` : ''}</div></div>
         <div class="acts">
           <button class="btn sm" data-aedit="${m.id}">Edit</button>
           ${m.status === 'open' ? `<button class="btn sm" data-aclose="${m.id}">Close now</button>` : ''}
           ${m.status === 'closed' ? `<button class="btn sm" data-areopen="${m.id}">Reopen</button>` : ''}
-          ${m.status === 'open' || m.status === 'closed' ? `<button class="btn sm danger" data-avoid="${m.id}">Void</button>` : ''}
+          ${m.status === 'resolved' || m.status === 'voided' ? `<button class="btn sm" data-aunresolve="${m.id}">Undo result</button>` : ''}
+          ${m.status !== 'voided' ? `<button class="btn sm danger" data-avoid="${m.id}">Void</button>` : ''}
           <button class="btn sm danger" data-adel="${m.id}" title="Delete market and refund open stakes">Delete</button>
         </div>
+        ${m.flags?.length ? `<div class="flagbox"><div class="hd"><span>⚠️ ${m.flags.length} report${m.flags.length === 1 ? '' : 's'}</span><button class="btn sm" data-aclearflags="${m.id}">Clear</button></div>${m.flags.map((f) => `<div><b>${esc(f.user?.name)}</b>: ${esc(f.reason)} <span class="muted">${ago(f.t)}</span></div>`).join('')}</div>` : ''}
         ${m.status === 'open' || m.status === 'closed' ? `<div class="resolve"><span class="small muted">Winner:</span><select data-rsel="${m.id}">${m.outcomes.map((o) => `<option value="${o.id}">${esc(o.name)} (${pct(o.price)})</option>`).join('')}</select><button class="btn sm primary" data-aresolve="${m.id}">Resolve &amp; pay out</button></div>` : ''}
       </div>`).join('') || '<div class="empty">No markets yet.</div>'}</div>`;
-  } else if (t === 'create') {
-    body.innerHTML = `<div class="templates"><span class="small muted" style="align-self:center">Quick templates:</span>${TEMPLATES.map((tp, i) => `<button data-tpl="${i}">${tp.label}</button>`).join('')}</div>
-      <form class="card" id="createForm">${marketFormFields({ type: 'binary', b: 150, hours: 3 })}<p class="form-error" id="createErr" hidden></p><div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end"><button class="btn primary">Create market</button></div></form>`;
-    wireMarketForm($('#createForm'));
-    $('#createForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const err = $('#createErr'); err.hidden = true;
-      try {
-        const r = await api('/api/admin/markets', { body: readMarketForm(e.target) });
-        S.markets.set(r.market.id, r.market);
-        toast(`Market created: <b>${esc(r.market.title)}</b>`);
-        location.hash = `#/m/${r.market.id}`;
-      } catch (ex) { err.textContent = ex.message; err.hidden = false; }
-    });
   } else if (t === 'players' || t === 'ideas') {
     body.innerHTML = '<div class="empty">Loading…</div>';
     try { S.adminData = await api('/api/admin/overview'); } catch (ex) { body.innerHTML = `<div class="empty">${esc(ex.message)}</div>`; return; }
@@ -744,6 +778,7 @@ async function renderAdminBody() {
       <label>Currency symbol<input name="currency" value="${esc(s.currency)}" maxlength="4"><span class="help">e.g. $, 🪙, HB</span></label>
       <label class="span">Tagline<input name="tagline" value="${esc(s.tagline)}" maxlength="120"></label>
       <label class="span">🏆 Prize for 1st place<textarea name="prizeText" rows="3" maxlength="500">${esc(s.prizeText)}</textarea><span class="help">Shown at the top of the leaderboard. Ideas: the golden trophy, first pick of the swag table, the CEO does your standup for a week, a custom Slack emoji of your face, lunch on the organizers.</span></label>
+      <label class="row span"><input type="checkbox" name="allowUserMarkets" ${s.allowUserMarkets ? 'checked' : ''}> Let players create their own markets <span class="help">(admins always can; only admins resolve or void)</span></label>
       <label>Starting balance for new players<input name="startingBalance" type="number" min="1" step="1" value="${s.startingBalance}"><span class="help">Only affects players who join after you change it.</span></label>
     </div><div style="margin-top:14px;display:flex;justify-content:flex-end"><button class="btn primary">Save settings</button></div></form>
     <div class="card danger-zone" style="margin-top:16px"><h3>Danger zone</h3><p class="muted small" style="margin-bottom:12px">Use before the real event to clear test data. Settings are kept either way.</p>
@@ -751,13 +786,49 @@ async function renderAdminBody() {
     $('#settingsForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = e.target;
-      try { const r = await api('/api/admin/settings', { method: 'PATCH', body: { eventName: f.eventName.value, currency: f.currency.value, tagline: f.tagline.value, prizeText: f.prizeText.value, startingBalance: Number(f.startingBalance.value) } }); S.settings = r.settings; renderTopbar(); toast('Settings saved.'); }
+      try { const r = await api('/api/admin/settings', { method: 'PATCH', body: { eventName: f.eventName.value, currency: f.currency.value, tagline: f.tagline.value, prizeText: f.prizeText.value, startingBalance: Number(f.startingBalance.value), allowUserMarkets: f.allowUserMarkets.checked } }); S.settings = r.settings; renderTopbar(); toast('Settings saved.'); }
       catch (ex) { toast(esc(ex.message), 'err'); }
     });
   }
 }
 
-function marketFormFields(v) {
+function renderCreate() {
+  if (!S.me) { app.innerHTML = `<div class="empty"><p style="margin-bottom:14px">Sign in to create a market.</p><button class="btn primary" data-action="login">Sign in</button></div>`; return; }
+  const admin = S.me.user.isAdmin;
+  if (!canCreate()) {
+    app.innerHTML = `<div class="card" style="max-width:520px;margin:30px auto"><h2>Market creation is admin-only right now</h2><p class="muted" style="margin-bottom:14px">Send your idea to the admins and they can post it.</p><button class="btn primary" data-action="suggest-dialog">Suggest a market</button></div>`;
+    return;
+  }
+  const pre = S.createPrefill || {}; S.createPrefill = null;
+  const form = (v) => `${marketFormFields(v, { admin })}<p class="form-error" id="createErr" hidden></p><div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end"><button class="btn primary">Create market</button></div>`;
+  app.innerHTML = `<h1>Create a market</h1>
+    <p class="muted create-intro">Anyone can post a bet. Admins call the result and have the final say, and they'll void it if anything is off, so write rules that make the answer obvious.</p>
+    <div class="templates"><span class="small muted" style="align-self:center">Quick templates:</span>${TEMPLATES.map((tp, i) => `<button data-tpl="${i}">${tp.label}</button>`).join('')}</div>
+    <form class="card" id="createForm">${form({ type: 'binary', b: 150, hours: 3, ...pre })}</form>`;
+  const f = $('#createForm');
+  wireMarketForm(f);
+  if (pre.title) f.title.focus();
+  app.querySelector('.templates').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tpl]'); if (!b) return;
+    const tp = TEMPLATES[Number(b.dataset.tpl)];
+    f.innerHTML = form({ ...tp, type: tp.type || 'multi', b: 150 });
+    wireMarketForm(f);
+    f.title.focus(); f.title.select();
+  });
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('#createErr'); err.hidden = true;
+    const btn = f.querySelector('button.primary'); btn.disabled = true;
+    try {
+      const r = await api('/api/markets', { body: readMarketForm(f) });
+      S.markets.set(r.market.id, r.market);
+      toast(`Market created: <b>${esc(r.market.title)}</b>`);
+      location.hash = `#/m/${r.market.id}`;
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+  });
+}
+
+function marketFormFields(v, opts = {}) {
   const outcomes = Array.isArray(v.outcomes) ? v.outcomes.join('\n') : v.outcomes || '';
   const isBinary = v.type === 'binary';
   return `<div class="form-grid">
@@ -766,10 +837,10 @@ function marketFormFields(v) {
     <label>Category<input name="category" list="catList" value="${esc(v.category || 'General')}" maxlength="30"><datalist id="catList">${[...new Set(['Teams', 'Food', 'People', 'Chaos', ...[...S.markets.values()].map((m) => m.category)])].map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
     <label class="span" data-outcomes ${isBinary ? 'hidden' : ''}>Outcomes (one per line, 2-12)<textarea name="outcomes" rows="5" placeholder="Team A\nTeam B\nTeam C">${esc(outcomes)}</textarea></label>
     <label>Trading closes<input name="closesAt" type="datetime-local" value="${toLocalInput(v.closesAt || (v.hours ? Date.now() + v.hours * 3600e3 : null))}"><span class="help">Leave empty to keep it open until you close it.</span></label>
-    <label>Liquidity (b)<input name="b" type="number" min="20" max="2000" step="10" value="${v.b ?? 150}"><span class="help">Lower = prices swing harder per bet. 100-200 suits a room of ~30.</span></label>
+    ${opts.admin ? `<label>Liquidity (b)<input name="b" type="number" min="20" max="2000" step="10" value="${v.b ?? 150}"><span class="help">Lower = prices swing harder per bet. 100-200 suits a room of ~30.</span></label>` : ''}
     <label class="span">Rules / how it resolves<textarea name="description" rows="3" maxlength="2000" placeholder="Resolves Yes if…">${esc(v.description || '')}</textarea></label>
     <label class="row"><input type="checkbox" name="live" ${v.live ? 'checked' : ''}> 🔴 Live event (shows in "Happening now")</label>
-    <label class="row"><input type="checkbox" name="featured" ${v.featured ? 'checked' : ''}> ⭐ Featured on the home page</label>
+    ${opts.admin ? `<label class="row"><input type="checkbox" name="featured" ${v.featured ? 'checked' : ''}> ⭐ Featured on the home page</label>` : ''}
   </div>`;
 }
 function wireMarketForm(form) {
@@ -779,24 +850,16 @@ function readMarketForm(f) {
   return {
     title: f.title.value, type: f.type.value, category: f.category.value, description: f.description.value,
     outcomes: f.type.value === 'binary' ? ['Yes', 'No'] : f.outcomes.value.split('\n').map((s) => s.trim()).filter(Boolean),
-    closesAt: fromLocalInput(f.closesAt.value), b: Number(f.b.value), live: f.live.checked, featured: f.featured.checked,
+    closesAt: fromLocalInput(f.closesAt.value), b: f.b ? Number(f.b.value) : undefined, live: f.live.checked, featured: f.featured ? f.featured.checked : undefined,
   };
 }
 
 app.addEventListener('click', async (e) => {
-  if (route().name !== 'admin') return;
+  if (!['admin', 'm'].includes(route().name)) return;
   const d = (k) => e.target.closest(`[data-${k}]`)?.dataset[k.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
   const run = async (fn, okMsg) => { try { await fn(); if (okMsg) toast(okMsg); } catch (ex) { toast(esc(ex.message), 'err'); } };
   let v;
   if ((v = d('atab'))) { S.adminTab = v; renderAdmin(); return; }
-  if ((v = d('tpl')) !== undefined) {
-    const tp = TEMPLATES[Number(v)];
-    const form = $('#createForm');
-    form.innerHTML = `${marketFormFields({ ...tp, type: tp.type || 'multi', b: 150 })}<p class="form-error" id="createErr" hidden></p><div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end"><button class="btn primary">Create market</button></div>`;
-    wireMarketForm(form);
-    form.title.focus(); form.title.select();
-    return;
-  }
   if ((v = d('aclose'))) return run(async () => { await api(`/api/admin/markets/${v}/close`, { method: 'POST' }); }, 'Trading closed.');
   if ((v = d('areopen'))) return run(async () => { await api(`/api/admin/markets/${v}/reopen`, { body: {} }); }, 'Market reopened with no close time.');
   if ((v = d('aresolve'))) {
@@ -805,14 +868,16 @@ app.addEventListener('click', async (e) => {
     if (!confirm(`Resolve "${m.title}" to "${o.name}"?\n\nEveryone holding ${o.name} gets ${cur()}1 per share. This can't be undone.`)) return;
     return run(async () => { await api(`/api/admin/markets/${v}/resolve`, { body: { outcomeId: o.id } }); }, `Resolved to <b>${esc(o.name)}</b>. Payouts sent.`);
   }
-  if ((v = d('avoid'))) { if (!confirm('Void this market and refund everyone\'s net stake?')) return; return run(async () => { await api(`/api/admin/markets/${v}/void`, { method: 'POST' }); }, 'Market voided and refunded.'); }
+  if ((v = d('avoid'))) { if (!confirm('Void this market?\n\nEvery bet is undone as if it never happened and everyone gets their net stake back. If it was already resolved, the payouts are reversed first.')) return; return run(async () => { await api(`/api/admin/markets/${v}/void`, { method: 'POST' }); }, 'Market voided and refunded.'); }
+  if ((v = d('aunresolve'))) { if (!confirm('Undo the result?\n\nPayouts or refunds are taken back and the market goes back to closed, so you can resolve it again. Balances can dip below zero if someone already spent their winnings.')) return; return run(async () => { await api(`/api/admin/markets/${v}/unresolve`, { method: 'POST' }); }, 'Result undone. Resolve it again or void it.'); }
+  if ((v = d('aclearflags'))) return run(async () => { await api(`/api/admin/markets/${v}/clear-flags`, { method: 'POST' }); }, 'Reports cleared.');
   if ((v = d('adel'))) { if (!confirm('Delete this market completely? Open stakes are refunded first. Settled payouts stay where they are.')) return; return run(async () => { await api(`/api/admin/markets/${v}`, { method: 'DELETE' }); }, 'Market deleted.'); }
   if ((v = d('aedit'))) return openEdit(v);
   if ((v = d('sgmake'))) {
     const s = S.adminData.suggestions.find((x) => x.id === v);
     await api(`/api/admin/suggestions/${v}`, { method: 'PATCH', body: { status: 'done' } });
-    S.adminTab = 'create'; await renderAdmin();
-    $('#createForm').title.value = s.text.slice(0, 140);
+    S.createPrefill = { title: s.text.slice(0, 140) };
+    location.hash = '#/create';
     return;
   }
   if ((v = d('sgdone'))) return run(async () => { await api(`/api/admin/suggestions/${v}`, { method: 'PATCH', body: { status: 'dismissed' } }); renderAdminBody(); });
@@ -838,7 +903,7 @@ app.addEventListener('submit', async (e) => {
 async function openEdit(id) {
   const { market: m } = await api(`/api/markets/${id}`);
   $('#editTitle').textContent = 'Edit market';
-  $('#editFields').innerHTML = marketFormFields({ ...m, type: m.binary ? 'binary' : 'multi', outcomes: m.outcomes.map((o) => o.name) }) +
+  $('#editFields').innerHTML = marketFormFields({ ...m, type: m.binary ? 'binary' : 'multi', outcomes: m.outcomes.map((o) => o.name) }, { admin: true }) +
     (m.tradeCount ? '<p class="help" style="margin-top:10px">Trading has started, so you can rename outcomes but not add or remove them, and liquidity is locked.</p>' : '');
   const form = $('#editForm');
   form.dataset.id = id;
@@ -882,7 +947,7 @@ function onMarket(mv, isNew) {
   const prev = S.markets.get(mv.id);
   S.markets.set(mv.id, mv);
   const r = route();
-  if (isNew && mv.status === 'open') toast(`🆕 New market: <a class="link" href="#/m/${mv.id}">${esc(mv.title)}</a>`, 'ok', 6000);
+  if (isNew && mv.status === 'open' && mv.createdBy?.id !== S.me?.user.id) toast(`🆕 ${mv.createdBy ? `<b>${esc(mv.createdBy.name)}</b> created` : 'New market'}: <a class="link" href="#/m/${mv.id}">${esc(mv.title)}</a>`, 'ok', 6000);
   if (r.name === 'markets') {
     const el = document.getElementById(`mc-${mv.id}`);
     if (el && prev && prev.status === mv.status) {
@@ -918,11 +983,12 @@ function connectStream() {
       scheduleRefresh();
     }
     else if (ev.type === 'settled') {
-      toast(ev.voided ? `🚫 Voided: ${esc(ev.title)}` : `🏁 <b>${esc(ev.title)}</b> resolved: <b>${esc(ev.outcomeName)}</b>`, 'ok', 7000);
+      toast(ev.undone ? `↩️ Result undone: <b>${esc(ev.title)}</b>. Payouts reversed.` : ev.voided ? `🚫 Voided: ${esc(ev.title)}` : `🏁 <b>${esc(ev.title)}</b> resolved: <b>${esc(ev.outcomeName)}</b>`, 'ok', 7000);
       scheduleRefresh();
     }
     else if (ev.type === 'leaderboard' || ev.type === 'feed' || ev.type === 'balance') scheduleRefresh();
     else if (ev.type === 'settings') { S.settings = ev.settings; renderTopbar(); if (['leaderboard', 'markets'].includes(route().name)) render(); }
+    else if (ev.type === 'flag') { if (S.me?.user.isAdmin) toast(`⚠️ <b>${esc(ev.user?.name)}</b> reported <a class="link" href="#/m/${ev.marketId}">${esc(ev.title)}</a>: ${esc(ev.reason)}`, 'err', 9000); }
     else if (ev.type === 'suggestion') { if (route().name === 'admin' && S.adminTab === 'ideas') renderAdminBody(); }
     else if (ev.type === 'reload') location.reload();
   };

@@ -25,19 +25,31 @@ Want to see it full of fake activity first? `npm run demo` seeds 15 bot traders 
 4. Buying pushes the price up and selling pushes it down, so being early on a good call pays.
 5. You can sell any time before trading closes to lock in profit or cut losses.
 6. **Net worth** is your cash plus the live value of open bets. The leaderboard ranks by net worth and updates in real time.
+7. **Anyone can create a market.** Click **+ Create**, pick a template or write your own question, and everyone gets a live notification. You can delete your own market until someone bets on it.
+8. **Spot something off?** Every market has a **Report a problem** button. Reports show on the market page and ping the admins.
+
+## Who decides
+
+Players create markets, but **only admins resolve them, and admins have the final say.**
+
+- Settle a market by closing trading and picking the winner. Winning shares pay $1 each instantly.
+- If you resolved one wrong, use **Undo result**. Payouts are taken back and the market returns to closed, so you can resolve it again. A player's balance can dip below zero if they already spent the winnings.
+- If there is any discrepancy, use **Void**. That includes unclear rules, inside info, or a dispute nobody can settle. Every bet is undone as if it never happened, and everyone gets back exactly what they put in. Void works even after a market was resolved.
+- The admin controls appear right on each market page and in the Admin panel. Reported markets float to the top of the Admin list.
 
 ## Running the event as an admin
 
 Sign in like anyone else, open **Admin**, and enter the admin password. The default password is `hackadmin` unless you set `ADMIN_PASSWORD`.
 
-- **Create market** has one-click templates for food arrival time, what the food is, first to nap, demo crashes and category winners. Tick **Live event** to put it in the "Happening now" strip.
+- **+ Create** has one-click templates for food arrival time, what the food is, first to nap, demo crashes and category winners. Tick **Live event** to put it in the "Happening now" strip. Admins also get the featured flag and the liquidity setting.
 - **Close now** stops trading the moment the answer is obvious, for example when the delivery driver walks in. That stops late snipes.
 - **Resolve & pay out** picks the winner and pays every winning share $1 instantly. Everyone sees a toast.
-- **Void** refunds everybody if a market turns out to be ambiguous.
+- **Undo result** reverses a wrong resolution so you can call it again.
+- **Void** refunds everybody if anything about a market is off, even after it was resolved.
 - **Edit** renames outcomes at any time. Once teams form, rename the placeholder teams in "Which team wins the hackathon?".
 - **Players** lets you gift or dock play money, for example a bonus for best team name.
-- **Suggestions** collects market ideas players send from the footer link. One click turns one into a market.
-- **Prize & settings** sets the event name, currency symbol, starting balance and the prize text on the leaderboard.
+- **Suggestions** collects market ideas from players when player-created markets are turned off. One click turns one into a market.
+- **Prize & settings** sets the event name, currency symbol, starting balance and the prize text on the leaderboard. It also has a switch to turn off player-created markets. When it's off, players can only send suggestions.
 - The danger zone resets markets and balances before the real event.
 
 ## Prize ideas for 1st place

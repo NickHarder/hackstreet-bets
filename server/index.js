@@ -109,11 +109,11 @@ function createMarket(input, opts = {}) {
     outcomes: names.map((n, i) => ({ id: uid(), name: n, q: 0, color: isBinary ? (i === 0 ? '#199e70' : '#e66767') : PALETTE[i % PALETTE.length] })),
     b, status: 'open', closesAt, featured: !!input.featured, live: !!input.live,
     createdAt: t, createdBy: opts.by || null, resolvedOutcomeId: null, resolvedAt: null,
-    volume: 0, tradeCount: 0, lastTradeAt: null, history: [],
+    volume: 0, tradeCount: 0, lastTradeAt: null, history: [], flags: [],
   };
   pushHistory(m, t, lmsrPrices(qsOf(m), b));
   db.markets[m.id] = m;
-  db.events.push({ id: uid(), type: 'new_market', t, marketId: m.id });
+  db.events.push({ id: uid(), type: 'new_market', t, marketId: m.id, userId: opts.by || undefined });
   return m;
 }
 
@@ -207,14 +207,44 @@ function resolveMarket(m, outcomeId, opts = {}) {
   }
 }
 
+function recomputeBiggestWin(u) {
+  let best = 0;
+  for (const p of positionsForUser(u.id)) if (p.settled && !p.settled.voided && p.settled.pnl > best) best = p.settled.pnl;
+  u.biggestWin = best;
+}
+
+// Reverse a resolution or a void: take payouts/refunds back and put the market
+// back to "closed" so an admin can resolve it again (or void it).
+function unsettleMarket(m) {
+  const touched = new Set();
+  for (const p of positionsForMarket(m.id)) {
+    if (!p.settled) continue;
+    const u = db.users[p.userId];
+    if (u) {
+      u.balance = round2(u.balance - p.settled.payout);
+      if (!p.settled.voided) {
+        u.realizedPnl = round2(u.realizedPnl - p.settled.pnl);
+        if (p.settled.pnl > 0) u.wins = Math.max(0, u.wins - 1);
+      }
+      touched.add(u);
+    }
+    p.settled = null;
+  }
+  m.status = 'closed'; m.resolvedOutcomeId = null; m.resolvedAt = null;
+  for (const u of touched) recomputeBiggestWin(u);
+}
+
+// Void = every bet is undone as if it never happened. Each player gets back
+// exactly their net stake (what they paid in minus what they sold out for).
 function voidMarket(m) {
-  if (m.status === 'resolved' || m.status === 'voided') fail(400, 'This market is already settled');
+  if (m.status === 'voided') fail(400, 'This market is already voided');
+  if (m.status === 'resolved') unsettleMarket(m);
   const t = now();
   m.status = 'voided'; m.resolvedAt = t;
   for (const p of positionsForMarket(m.id)) {
     if (p.settled) continue;
     const u = db.users[p.userId];
-    const refund = round2(Math.max(0, p.invested));
+    const refund = round2(p.invested);
     if (u) u.balance = round2(u.balance + refund);
     p.settled = { payout: refund, pnl: 0, t, voided: true };
   }
@@ -254,6 +284,8 @@ function marketView(m, detail = false) {
     status: effStatus(m), closesAt: m.closesAt, createdAt: m.createdAt, featured: m.featured, live: m.live,
     b: m.b, volume: m.volume, tradeCount: m.tradeCount, lastTradeAt: m.lastTradeAt,
     resolvedOutcomeId: m.resolvedOutcomeId, resolvedAt: m.resolvedAt,
+    createdBy: m.createdBy ? publicUser(db.users[m.createdBy]) : null,
+    flags: (m.flags || []).map((f) => ({ user: publicUser(db.users[f.userId]), reason: f.reason, t: f.t })),
     traders: positionsForMarket(m.id).filter(hasShares).length,
     outcomes: m.outcomes.map((o, i) => ({ id: o.id, name: o.name, color: o.color, q: o.q, price: prices[i], change: ch[i] })),
     spark: m.history.slice(-40).map((h) => [h.t, ...h.p]),
@@ -423,6 +455,55 @@ app.post('/api/markets/:id/trade', requireUser, (req, res) => {
   res.json({ trade: tradeView(trade), me: meView(req.user), market: marketView(m, true), position: getPosition(req.user.id, m.id, false) });
 });
 
+// Anyone signed in can create a market (unless admins turn it off).
+// Only admins can resolve, void, or set featured/liquidity.
+app.post('/api/markets', requireUser, (req, res) => {
+  const u = req.user;
+  const input = { ...(req.body || {}) };
+  if (!u.isAdmin) {
+    if (!db.settings.allowUserMarkets) fail(403, 'Admins have turned off player-created markets. Send a suggestion instead.');
+    const pending = Object.values(db.markets).filter((m) => m.createdBy === u.id && (m.status === 'open' || m.status === 'closed')).length;
+    if (pending >= 8) fail(429, 'You already have 8 markets waiting on a result. Let some settle first.');
+    delete input.featured; delete input.b;
+  }
+  const title = String(input.title || '').trim().toLowerCase();
+  if (Object.values(db.markets).some((m) => effStatus(m) === 'open' && m.title.trim().toLowerCase() === title)) fail(409, 'There is already an open market with that exact question');
+  if (input.closesAt && Number(input.closesAt) < now() + 60e3) fail(400, 'Pick a close time in the future');
+  const m = createMarket(input, { by: u.id });
+  persist(db);
+  broadcast({ type: 'market', market: marketView(m), isNew: true });
+  broadcast({ type: 'feed' });
+  res.json({ market: marketView(m, true) });
+});
+
+app.delete('/api/markets/:id', requireUser, (req, res) => {
+  const m = marketOr404(req.params.id);
+  if (m.createdBy !== req.user.id) fail(403, 'Only the creator can delete their own market');
+  if (m.tradeCount > 0) fail(400, 'Someone already bet on this. Report a problem and an admin can void it.');
+  delete db.markets[m.id];
+  db.events = db.events.filter((e) => e.marketId !== m.id);
+  persist(db);
+  broadcast({ type: 'market_deleted', marketId: m.id });
+  broadcast({ type: 'feed' });
+  res.json({ ok: true });
+});
+
+app.post('/api/markets/:id/flag', requireUser, (req, res) => {
+  const m = marketOr404(req.params.id);
+  if (m.status === 'voided') fail(400, 'This market is already voided');
+  const reason = String(req.body?.reason || '').trim().slice(0, 300);
+  if (reason.length < 3) fail(400, 'Tell the admins what looks off');
+  m.flags = m.flags || [];
+  const existing = m.flags.find((f) => f.userId === req.user.id);
+  if (existing) { existing.reason = reason; existing.t = now(); } else m.flags.push({ userId: req.user.id, reason, t: now() });
+  db.events.push({ id: uid(), type: 'flag', t: now(), marketId: m.id, userId: req.user.id, note: reason });
+  persist(db);
+  broadcast({ type: 'market', market: marketView(m) });
+  broadcast({ type: 'flag', marketId: m.id, title: m.title, reason, user: publicUser(req.user) });
+  broadcast({ type: 'feed' });
+  res.json({ ok: true });
+});
+
 app.post('/api/suggestions', requireUser, (req, res) => {
   const text = String(req.body?.text || '').trim().slice(0, 300);
   if (text.length < 5) fail(400, 'Give us a little more detail');
@@ -516,6 +597,25 @@ app.post('/api/admin/markets/:id/void', requireAdmin, (req, res) => {
   voidMarket(m);
   res.json({ market: marketView(m, true) });
 });
+app.post('/api/admin/markets/:id/unresolve', requireAdmin, (req, res) => {
+  const m = marketOr404(req.params.id);
+  if (m.status !== 'resolved' && m.status !== 'voided') fail(400, 'Only resolved or voided markets can be undone');
+  unsettleMarket(m);
+  db.events.push({ id: uid(), type: 'unresolved', t: now(), marketId: m.id });
+  persist(db);
+  broadcast({ type: 'market', market: marketView(m) });
+  broadcast({ type: 'settled', marketId: m.id, title: m.title, undone: true });
+  broadcast({ type: 'feed' });
+  broadcast({ type: 'leaderboard' });
+  res.json({ market: marketView(m, true) });
+});
+app.post('/api/admin/markets/:id/clear-flags', requireAdmin, (req, res) => {
+  const m = marketOr404(req.params.id);
+  m.flags = [];
+  persist(db);
+  broadcast({ type: 'market', market: marketView(m) });
+  res.json({ ok: true });
+});
 app.delete('/api/admin/markets/:id', requireAdmin, (req, res) => {
   const m = marketOr404(req.params.id);
   if (m.status === 'open' || m.status === 'closed') voidMarket(m);
@@ -536,6 +636,7 @@ app.patch('/api/admin/settings', requireAdmin, (req, res) => {
   if (b.eventName !== undefined) s.eventName = String(b.eventName).trim().slice(0, 60) || s.eventName;
   if (b.tagline !== undefined) s.tagline = String(b.tagline).trim().slice(0, 120);
   if (b.prizeText !== undefined) s.prizeText = String(b.prizeText).trim().slice(0, 500);
+  if (b.allowUserMarkets !== undefined) s.allowUserMarkets = !!b.allowUserMarkets;
   if (b.currency !== undefined) s.currency = String(b.currency).trim().slice(0, 4) || '$';
   if (b.startingBalance !== undefined) { const n = Number(b.startingBalance); if (!(n >= 1 && n <= 1e7)) fail(400, 'Starting balance must be between 1 and 10,000,000'); s.startingBalance = round2(n); }
   persist(db);
