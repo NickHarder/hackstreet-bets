@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { loadDb, persist, persistNow, emptyDb, flushOnExit, DB_FILE } from './store.js';
+import { loadDb, persist as persistToDisk, persistNow as persistToDiskNow, emptyDb, flushOnExit, DB_FILE } from './store.js';
 import { lmsrPrices, lmsrTradeCost, lmsrSharesForCost } from './market.js';
 import { PALETTE, starterPack, demoPack } from './seed.js';
 
@@ -13,6 +13,25 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'hackadmin';
 const DEMO = !!process.env.DEMO;
 
 let db = loadDb();
+
+// ---------------------------------------------------------------- caching
+// Every change to the data goes through persist()/persistNow(), which bumps
+// `version`. Derived data (position indexes, leaderboard, feed) is rebuilt at
+// most once per version instead of once per request. This matters because each
+// bet makes every open browser tab ask for a fresh leaderboard.
+let version = 0;
+const invalidate = () => { version++; };
+function persist(d) { invalidate(); persistToDisk(d); }
+function persistNow(d) { invalidate(); persistToDiskNow(d); }
+function cached(fn) {
+  const store = new Map();
+  let at = -1;
+  return (key = '') => {
+    if (at !== version) { store.clear(); at = version; }
+    if (!store.has(key)) store.set(key, fn(key));
+    return store.get(key);
+  };
+}
 
 // ---------------------------------------------------------------- helpers
 const now = () => Date.now();
@@ -121,11 +140,20 @@ const posKey = (u, m) => `${u}:${m}`;
 function getPosition(userId, marketId, create = true) {
   const k = posKey(userId, marketId);
   let p = db.positions[k];
-  if (!p && create) p = db.positions[k] = { userId, marketId, shares: {}, invested: 0, settled: null };
+  if (!p && create) { p = db.positions[k] = { userId, marketId, shares: {}, invested: 0, settled: null }; invalidate(); }
   return p;
 }
-const positionsForMarket = (marketId) => Object.values(db.positions).filter((p) => p.marketId === marketId);
-const positionsForUser = (userId) => Object.values(db.positions).filter((p) => p.userId === userId);
+const positionIndex = cached(() => {
+  const byUser = new Map(); const byMarket = new Map();
+  for (const p of Object.values(db.positions)) {
+    if (!byUser.has(p.userId)) byUser.set(p.userId, []);
+    if (!byMarket.has(p.marketId)) byMarket.set(p.marketId, []);
+    byUser.get(p.userId).push(p); byMarket.get(p.marketId).push(p);
+  }
+  return { byUser, byMarket };
+});
+const positionsForMarket = (marketId) => positionIndex().byMarket.get(marketId) || [];
+const positionsForUser = (userId) => positionIndex().byUser.get(userId) || [];
 const hasShares = (p) => Object.values(p.shares).some((s) => s > 1e-6);
 
 function executeTrade({ user, market, outcomeId, side, amount, shares, t = now(), silent = false }) {
@@ -312,7 +340,9 @@ function eventView(e) {
     user: e.userId ? publicUser(db.users[e.userId]) : null, amount: e.amount ?? null, note: e.note || null,
   };
 }
-function feed(limit = 80) {
+const feed = (limit = 80) => feedCached(String(limit));
+const feedCached = cached((key) => buildFeed(Number(key)));
+function buildFeed(limit) {
   const items = db.trades.slice(-limit).map(tradeView).concat(db.events.slice(-limit).map(eventView));
   items.sort((a, b) => b.t - a.t);
   return items.slice(0, limit);
@@ -334,7 +364,8 @@ function netWorth(u, pricesOf = priceCache()) {
   return round2(v);
 }
 
-function leaderboard() {
+const leaderboard = cached(buildLeaderboard);
+function buildLeaderboard() {
   const pricesOf = priceCache();
   return Object.values(db.users)
     .map((u) => {
@@ -436,6 +467,8 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/me', (req, res) => res.json({ me: meView(currentUser(req)) }));
+// One request per tab after each bet, instead of three.
+app.get('/api/live', (req, res) => res.json({ me: meView(currentUser(req)), leaderboard: leaderboard(), feed: feed() }));
 app.get('/api/leaderboard', (req, res) => res.json({ leaderboard: leaderboard() }));
 app.get('/api/feed', (req, res) => res.json({ feed: feed(Math.min(300, Number(req.query.limit) || 80)) }));
 app.get('/api/markets', (req, res) => res.json({ markets: marketList() }));
@@ -695,7 +728,15 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err instanceof HttpError ? err.message : 'Something broke on the server' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// Express 5 calls this callback with an error if the port can't be bound, so
+// check it instead of announcing a server that isn't actually listening.
+app.listen(PORT, '0.0.0.0', (err) => {
+  if (err) {
+    console.error(err.code === 'EADDRINUSE'
+      ? `\n  Port ${PORT} is already in use. Is HackStreet Bets already running?\n  Stop the other copy, or start this one with PORT=<another port>.\n`
+      : `\n  Could not start the server: ${err.message}\n`);
+    process.exit(1);
+  }
   const lan = Object.values(os.networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
   console.log(`\n  HackStreet Bets is up${DEMO ? ' (demo data loaded)' : ''}`);
   console.log(`  Local:    http://localhost:${PORT}`);

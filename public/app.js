@@ -102,8 +102,10 @@ function toast(msg, kind = 'ok', ms = 3800) {
 function openDialog(id) {
   const d = document.getElementById(id);
   if (!d.open) d.showModal();
+  // Focus right away, never on a timer: a late focus() on a slow device can
+  // yank the cursor back to the first field while someone is typing their PIN.
   const first = d.querySelector('input, textarea, select');
-  if (first) setTimeout(() => first.focus(), 30);
+  if (first && !d.contains(document.activeElement)) first.focus();
 }
 // Light-dismiss fallback for browsers without <dialog closedby>
 if (!('closedBy' in HTMLDialogElement.prototype)) {
@@ -924,15 +926,19 @@ $('#editForm').addEventListener('submit', async (e) => {
 });
 
 // ------------------------------------------------------------ live updates (SSE)
-let refreshTimer = null;
+// After a bet, every tab refreshes leaderboard + feed + balance in ONE request.
+// Delays are jittered so 60 tabs don't all hit the server in the same instant,
+// and a tab never has more than one refresh in flight.
+let refreshTimer = null; let refreshing = false; let refreshAgain = false;
 function scheduleRefresh() {
+  if (refreshing) { refreshAgain = true; return; }
   if (refreshTimer) return;
   refreshTimer = setTimeout(async () => {
-    refreshTimer = null;
+    refreshTimer = null; refreshing = true;
     try {
-      const [lb, fd, me] = await Promise.all([api('/api/leaderboard'), api('/api/feed'), S.me ? api('/api/me') : Promise.resolve(null)]);
-      S.leaderboard = lb.leaderboard; S.feed = fd.feed;
-      if (me) S.me = me.me;
+      const d = await api('/api/live');
+      S.leaderboard = d.leaderboard; S.feed = d.feed;
+      if (S.me && d.me) S.me = d.me;
       renderTopbar();
       const r = route().name;
       if (r === 'leaderboard') renderLeaderboard();
@@ -940,7 +946,9 @@ function scheduleRefresh() {
       else if (r === 'portfolio') renderPortfolio();
       else if (r === 'm' && S.detail) { renderPositionBox(); }
     } catch { /* offline blip */ }
-  }, 350);
+    refreshing = false;
+    if (refreshAgain) { refreshAgain = false; scheduleRefresh(); }
+  }, 300 + Math.random() * 500);
 }
 
 function onMarket(mv, isNew) {

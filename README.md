@@ -68,6 +68,39 @@ Pick one and put it in **Prize & settings**:
 
 Prices come from a logarithmic market scoring rule, the standard automated market maker for prediction markets. There is always someone to trade against, so a market works with only a handful of players. Each market's **liquidity (b)** setting controls how far one bet moves the price. Use 100 to 200 for a room of about 30 people, and lower it to make prices swing harder.
 
+## Before the event
+
+- Set your own `ADMIN_PASSWORD`. The default is `hackadmin`.
+- On the morning of the event, open Admin, then Prize & settings, and click **Reset markets + balances (keep players), and reload starter markets**. Starter markets close relative to when the server first started, so if you deployed days early the food bets will already be closed.
+- Never run `npm run demo` on the real server. If you did, use the same reset.
+- On a cloud host, attach a persistent volume, set `DATA_DIR` to it, and run exactly one instance.
+- Rename the placeholder teams and nap candidates.
+- Open the URL on a phone on the office Wi-Fi before you announce it.
+- Run `npm test` and `npm run loadtest` once on the machine or host you'll use.
+
+## Tests
+
+```bash
+npm test           # unit, API and browser tests (about 15 seconds)
+npm run loadtest   # simulates 30 and 60 open tabs betting; prints a table
+```
+
+`npm test` starts real servers on free ports with throwaway data folders, so it never touches your real data. It covers sign-in, betting limits, player-created markets, admin permissions, every resolve, undo and void path, and checks that balances end up exactly right. It also covers persistence across restarts and refusing to start on a busy port.
+
+The browser tests use Playwright and skip themselves if it isn't installed. To include them:
+
+```bash
+npm i -D playwright && npx playwright install chromium
+```
+
+Measured with `npm run loadtest` after 1,500 past bets:
+
+| Open tabs | Bets per second | Server CPU | Slowest bets (p95) |
+|---|---|---|---|
+| 30 | 2 | 7% | 4 ms |
+| 60 | 2 | 9% | 6 ms |
+| 100 | 3 | 16% | 7 ms |
+
 ## Under the hood
 
 - One Node + Express server with no database. State lives in `data/db.json`, saved after every change, so a restart loses nothing.
@@ -79,3 +112,5 @@ Prices come from a logarithmic market scoring rule, the standard automated marke
 | `npm start` | Run the server on port 3000. Set `PORT` to change it. |
 | `npm run demo` | Run with bots and fake history, on first start only. |
 | `npm run reset` | Delete all data. |
+| `npm test` | Run the test suite. |
+| `npm run loadtest` | Simulate a busy room and print timings. |
