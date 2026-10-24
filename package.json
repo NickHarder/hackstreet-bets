@@ -1,0 +1,16 @@
+{
+  "name": "hackstreet-bets",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kalshi-style play-money prediction market for an internal hackathon",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "demo": "DEMO=1 node server/index.js",
+    "reset": "node server/reset.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>HackStreet Bets</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a class="brand" href="#/" aria-label="Home">
+      <span class="brand-mark">📈</span>
+      <span class="brand-text"><span class="brand-name">HackStreet Bets</span><span class="brand-event" id="brand-event"></span></span>
+    </a>
+    <nav class="nav" id="nav" aria-label="Primary">
+      <a href="#/" data-nav="markets">Markets</a>
+      <a href="#/leaderboard" data-nav="leaderboard">Leaderboard</a>
+      <a href="#/portfolio" data-nav="portfolio">Portfolio</a>
+      <a href="#/activity" data-nav="activity">Activity</a>
+      <a href="#/admin" data-nav="admin" id="nav-admin" hidden>Admin</a>
+    </nav>
+    <div class="topbar-right" id="topbar-right"></div>
+  </div>
+</header>
+<div class="ticker" id="ticker" aria-live="off"></div>
+<main class="container" id="app"></main>
+<footer class="footer container">
+  <span>Play money only. Nothing here is real, except the bragging.</span>
+  <button class="link" data-action="suggest">Suggest a market</button>
+</footer>
+
+<dialog id="authDialog" closedby="any" aria-labelledby="authTitle">
+  <form id="authForm" class="dialog-form" method="dialog">
+    <h2 id="authTitle">Join the market</h2>
+    <p class="muted">Pick a handle and a PIN. A new handle creates an account and funds it with <strong id="authStart"></strong> of play money. Come back later with the same handle + PIN.</p>
+    <label>Handle <input name="name" autocomplete="username" required minlength="2" maxlength="20" placeholder="e.g. nick"></label>
+    <label>PIN <input name="pin" type="password" autocomplete="current-password" required minlength="4" placeholder="at least 4 characters"></label>
+    <p class="form-error" id="authError" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="btn primary">Let's go</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="suggestDialog" closedby="any" aria-labelledby="suggestTitle">
+  <form id="suggestForm" class="dialog-form" method="dialog">
+    <h2 id="suggestTitle">Suggest a market</h2>
+    <p class="muted">Got a bet the room needs? Admins see suggestions and can spin them up in seconds.</p>
+    <label>Your idea <textarea name="text" rows="3" required minlength="5" maxlength="300" placeholder="e.g. Will anyone fall asleep in the lounge before midnight?"></textarea></label>
+    <p class="form-error" id="suggestError" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="btn primary">Send it</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="editDialog" closedby="any" aria-labelledby="editTitle">
+  <form id="editForm" class="dialog-form wide" method="dialog">
+    <h2 id="editTitle">Edit market</h2>
+    <div id="editFields"></div>
+    <p class="form-error" id="editError" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" data-action="close-dialog">Cancel</button>
+      <button type="submit" class="btn primary">Save changes</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/app.js"></script>
+</body>
+</html>
