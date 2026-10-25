@@ -106,7 +106,7 @@ Measured with `npm run loadtest` after 1,500 past bets:
 
 ## Promo video
 
-`promo/` holds a 20-second vertical (1080×1920) promo made with [Remotion](https://www.remotion.dev). It walks through the night in five bets: happy hour, dinner, the first nap, the demo crash and the leaderboard. It ends on a "Place your bets" card in the poster's gold and silver.
+`promo/` holds a 27-second vertical (1080×1920) promo made with [Remotion](https://www.remotion.dev). It walks through the night in five bets: happy hour, dinner, the first nap, the demo crash and the leaderboard. It ends on a "Place your bets" card in the poster's gold and silver.
 
 ```bash
 cd promo

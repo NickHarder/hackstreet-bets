@@ -6,16 +6,16 @@ loadFonts();
 
 // ---------------------------------------------------------------- timeline (30 fps)
 const T = {
-  title: [0, 66],
-  hook: [66, 126],
-  happy: [126, 210],
-  dinner: [210, 288],
-  nap: [288, 378],
-  demo: [378, 462],
-  board: [462, 528],
-  end: [528, 600],
+  title: [0, 84],
+  hook: [84, 162],
+  happy: [162, 282],
+  dinner: [282, 396],
+  nap: [396, 516],
+  demo: [516, 636],
+  board: [636, 726],
+  end: [726, 816],
 };
-export const PROMO_FRAMES = 600;
+export const PROMO_FRAMES = 816;
 const CUTS = Object.values(T).map(([a]) => a).filter((f) => f > 0);
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' };
@@ -209,10 +209,10 @@ const TitleScene = () => {
   const { fps } = useVideoConfig();
   const left = spring({ frame: frame - 4, fps, config: { damping: 16, stiffness: 140 } });
   const right = spring({ frame: frame - 9, fps, config: { damping: 16, stiffness: 140 } });
-  const vs = useSlam(18, { from: 4, damping: 9 });
-  const flash = interpolate(frame, [18, 20, 28], [0, 0.85, 0], clamp);
+  const vs = useSlam(22, { from: 4, damping: 9 });
+  const flash = interpolate(frame, [22, 24, 32], [0, 0.85, 0], clamp);
   return (
-    <AbsoluteFill style={{ transform: shake(frame, 18, 34, 12) }}>
+    <AbsoluteFill style={{ transform: shake(frame, 22, 34, 12) }}>
       <div style={{ position: 'absolute', top: 330, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [2, 10], [0, 1], clamp) }}>
         <Kicker size={36} spacing="0.5em" color={C.text2}>Gauntlet presents</Kicker>
       </div>
@@ -220,13 +220,13 @@ const TitleScene = () => {
         <span style={{ fontFamily: DISPLAY, fontSize: 196, lineHeight: 1, ...gradText(C.goldGrad) }}>CHAMPIONS</span>
       </div>
       <div style={{ position: 'absolute', top: 790, width: '100%', height: 260, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        {frame >= 18 && <Bolt size={340} opacity={vs.opacity * 0.9} />}
+        {frame >= 22 && <Bolt size={340} opacity={vs.opacity * 0.9} />}
         <span style={{ position: 'relative', fontFamily: DISPLAY, fontSize: 200, transform: `scale(${vs.scale}) skewX(-12deg)`, opacity: vs.opacity, ...gradText(C.goldGrad), filter: 'drop-shadow(0 0 26px rgba(255,190,90,0.9))' }}>VS.</span>
       </div>
       <div style={{ position: 'absolute', top: 1060, width: '100%', textAlign: 'center', transform: `translateX(${interpolate(right, [0, 1], [1100, 0])}px)` }}>
         <span style={{ fontFamily: DISPLAY, fontSize: 180, lineHeight: 1, ...gradText(C.silverGrad) }}>CHALLENGERS</span>
       </div>
-      <div style={{ position: 'absolute', top: 1320, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [30, 40], [0, 1], clamp), transform: `translateY(${interpolate(frame, [30, 40], [30, 0], clamp)}px)` }}>
+      <div style={{ position: 'absolute', top: 1320, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [36, 46], [0, 1], clamp), transform: `translateY(${interpolate(frame, [36, 46], [30, 0], clamp)}px)` }}>
         <Kicker size={44} spacing="0.3em">24 hours. Two sides.</Kicker>
         <Kicker size={44} spacing="0.3em" color={C.text}>One prediction market.</Kicker>
       </div>
@@ -237,16 +237,16 @@ const TitleScene = () => {
 
 const HookScene = () => {
   const frame = useCurrentFrame();
-  const a = useSlam(2); const b = useSlam(10); const c = useSlam(18, { from: 3 });
-  const badge = interpolate(frame, [30, 40], [80, 0], { ...clamp, easing: ease });
+  const a = useSlam(4); const b = useSlam(15); const c = useSlam(26, { from: 3 });
+  const badge = interpolate(frame, [40, 50], [80, 0], { ...clamp, easing: ease });
   return (
-    <AbsoluteFill style={{ transform: shake(frame, 18, 30) }}>
+    <AbsoluteFill style={{ transform: shake(frame, 26, 30) }}>
       <div style={{ position: 'absolute', top: 470, left: 0, right: 0, textAlign: 'center' }}>
         <div style={{ transform: `scale(${a.scale})`, opacity: a.opacity }}><Kicker size={58} spacing="0.3em">New this year:</Kicker></div>
         <div style={{ fontFamily: DISPLAY, fontSize: 250, lineHeight: 0.95, color: C.text, marginTop: 30, transform: `scale(${b.scale})`, opacity: b.opacity }}>BET ON</div>
         <div style={{ fontFamily: DISPLAY, fontSize: 210, lineHeight: 1, transform: `scale(${c.scale}) rotate(-3deg)`, opacity: c.opacity, ...gradText(C.goldGrad), filter: 'drop-shadow(0 0 30px rgba(227,178,92,0.5))' }}>EVERYTHING.</div>
       </div>
-      <div style={{ position: 'absolute', top: 1180, left: 90, right: 90, textAlign: 'center', transform: `translateY(${badge}px)`, opacity: interpolate(frame, [30, 36], [0, 1], clamp), border: '3px solid rgba(227,178,92,0.5)', borderRadius: 999, padding: '26px 30px', background: 'rgba(0,0,0,0.5)' }}>
+      <div style={{ position: 'absolute', top: 1180, left: 90, right: 90, textAlign: 'center', transform: `translateY(${badge}px)`, opacity: interpolate(frame, [40, 46], [0, 1], clamp), border: '3px solid rgba(227,178,92,0.5)', borderRadius: 999, padding: '26px 30px', background: 'rgba(0,0,0,0.5)' }}>
         <div style={{ fontFamily: LABEL, fontWeight: 600, fontSize: 44, letterSpacing: '0.08em', color: C.text }}><span style={gradText(C.goldGrad)}>$1,000</span> FAKE MONEY</div>
         <div style={{ fontFamily: LABEL, fontWeight: 500, fontSize: 36, letterSpacing: '0.12em', color: C.text2, marginTop: 4 }}>100% REAL BRAGGING RIGHTS</div>
       </div>
@@ -256,7 +256,7 @@ const HookScene = () => {
 
 const NapScene = () => {
   const frame = useCurrentFrame();
-  const stampAt = 52;
+  const stampAt = 62;
   const p = interpolate(frame, [8, stampAt], [0, 1], { ...clamp, easing: Easing.inOut(Easing.cubic) });
   const rows = [
     { name: '“brb, grabbing my charger”', a: 0.18, b: 1, color: C.gold },
@@ -284,7 +284,7 @@ const NapScene = () => {
         })}
         <Stamp at={stampAt} text="RESOLVED" top={300} />
       </Card>
-      <Caption at={60} sub="(no charger was found)">GONE 40 MINUTES.</Caption>
+      <Caption at={70} sub="(no charger was found)">GONE 40 MINUTES.</Caption>
     </AbsoluteFill>
   );
 };
@@ -297,7 +297,7 @@ const BoardScene = () => {
     { rank: 1, h: 470, amt: '$2,317', col: C.gold, grad: C.goldGrad, x: 390, delay: 0 },
     { rank: 3, h: 250, amt: '$1,509', col: C.bronze, grad: 'linear-gradient(180deg,#f3c49b,#d5905b,#8c5427)', x: 690, delay: 12 },
   ];
-  const you = useSlam(26, { from: 3, damping: 9 });
+  const you = useSlam(30, { from: 3, damping: 9 });
   return (
     <AbsoluteFill>
       <div style={{ position: 'absolute', top: 230, left: 0, right: 0, textAlign: 'center' }}>
@@ -308,19 +308,19 @@ const BoardScene = () => {
         const s = spring({ frame: frame - p.delay, fps, config: { damping: 15, stiffness: 120 } });
         return (
           <div key={p.rank} style={{ position: 'absolute', left: p.x, width: 300, bottom: 560, height: p.h * s, background: `linear-gradient(180deg, ${p.col}40, ${p.col}10)`, border: `3px solid ${p.col}`, borderBottom: 'none', borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 26, overflow: 'visible' }}>
-            <div style={{ position: 'absolute', top: -150, width: 120, height: 120, borderRadius: 999, background: p.grad, display: 'grid', placeItems: 'center', fontFamily: DISPLAY, fontSize: 70, color: '#1c1305', opacity: s, boxShadow: `0 0 30px ${p.col}88` }}>{p.rank === 1 && frame >= 26 ? '★' : '?'}</div>
+            <div style={{ position: 'absolute', top: -150, width: 120, height: 120, borderRadius: 999, background: p.grad, display: 'grid', placeItems: 'center', fontFamily: DISPLAY, fontSize: 70, color: '#1c1305', opacity: s, boxShadow: `0 0 30px ${p.col}88` }}>{p.rank === 1 && frame >= 30 ? '★' : '?'}</div>
             <div style={{ fontFamily: DISPLAY, fontSize: 96, ...gradText(p.grad), opacity: s }}>#{p.rank}</div>
             <div style={{ fontFamily: DISPLAY, fontSize: 62, color: C.text, opacity: s }}>{p.amt}</div>
           </div>
         );
       })}
-      {frame >= 26 && (
+      {frame >= 30 && (
         <div style={{ position: 'absolute', top: 660, left: 390, width: 300, textAlign: 'center', transform: `scale(${you.scale}) rotate(-6deg)`, opacity: you.opacity }}>
           <span style={{ fontFamily: DISPLAY, fontSize: 110, color: C.text, background: '#ff6b6b', padding: '0 26px', borderRadius: 18, boxShadow: '0 10px 40px rgba(255,107,107,0.5)' }}>YOU?</span>
         </div>
       )}
-      <Confetti start={26} />
-      <div style={{ position: 'absolute', top: 1400, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [34, 42], [0, 1], clamp) }}>
+      <Confetti start={30} />
+      <div style={{ position: 'absolute', top: 1400, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [40, 50], [0, 1], clamp) }}>
         <div style={{ fontFamily: DISPLAY, fontSize: 92, color: C.text }}>FAKE MONEY.</div>
         <div style={{ fontFamily: DISPLAY, fontSize: 92, ...gradText(C.goldGrad) }}>REAL BRAGGING RIGHTS.</div>
       </div>
@@ -350,10 +350,10 @@ const EndScene = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const lock = spring({ frame, fps, config: { damping: 14, stiffness: 120 } });
-  const cta = useSlam(14, { from: 2.4, damping: 10 });
+  const cta = useSlam(16, { from: 2.4, damping: 10 });
   const glow = 0.6 + 0.4 * Math.sin(frame / 5);
   return (
-    <AbsoluteFill style={{ transform: shake(frame, 14, 24) }}>
+    <AbsoluteFill style={{ transform: shake(frame, 16, 24) }}>
       <div style={{ position: 'absolute', top: 300, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `scale(${interpolate(lock, [0, 1], [0.8, 1])})`, opacity: lock }}>
         <svg width="150" height="150" viewBox="0 0 32 32" style={{ filter: `drop-shadow(0 0 ${30 * glow}px rgba(227,178,92,0.8))` }}>
           <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fbe7b5" /><stop offset=".5" stopColor="#e3b25c" /><stop offset="1" stopColor="#a8742a" /></linearGradient></defs>
@@ -367,12 +367,12 @@ const EndScene = () => {
         <div style={{ fontFamily: DISPLAY, fontSize: 210, lineHeight: 0.95, color: C.text }}>PLACE YOUR</div>
         <div style={{ fontFamily: DISPLAY, fontSize: 250, lineHeight: 0.95, ...gradText(C.goldGrad), filter: 'drop-shadow(0 0 30px rgba(227,178,92,0.55))' }}>BETS.</div>
       </div>
-      <div style={{ position: 'absolute', top: 1360, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [24, 34], [0, 1], clamp) }}>
+      <div style={{ position: 'absolute', top: 1360, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [30, 40], [0, 1], clamp) }}>
         <div style={{ fontFamily: DISPLAY, fontSize: 84 }}><span style={gradText(C.goldGrad)}>CHAMPIONS</span> <span style={{ ...gradText(C.goldGrad), display: 'inline-block', transform: 'skewX(-12deg)' }}>VS.</span> <span style={gradText(C.silverGrad)}>CHALLENGERS</span></div>
         <Kicker size={40} spacing="0.26em" style={{ marginTop: 18 }}>Nov 6–7 · Fri 5 PM — Sat 5 PM</Kicker>
         <Kicker size={40} spacing="0.26em" color={C.text} style={{ marginTop: 8 }}>Austin, TX</Kicker>
       </div>
-      <div style={{ position: 'absolute', bottom: 120, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [36, 46], [0, 1], clamp) }}>
+      <div style={{ position: 'absolute', bottom: 120, left: 0, right: 0, textAlign: 'center', opacity: interpolate(frame, [44, 54], [0, 1], clamp) }}>
         <Kicker size={34} spacing="0.2em" color={C.muted}>Link drops at kickoff. Bring your gut feelings.</Kicker>
       </div>
     </AbsoluteFill>
@@ -390,14 +390,14 @@ export const Promo = () => {
       <Sequence {...seq(T.title)}><TitleScene /></Sequence>
       <Sequence {...seq(T.hook)}><HookScene /></Sequence>
       <Sequence {...seq(T.happy)}>
-        <BinaryBeat day="Friday" from={17 * 60} to={18 * 60 + 41} label="Kickoff happy hour" tag="FOOD" question="Happy hour runs dry before 7 PM?" seed="happy" y0={0.22} y1={0.94} winner="yes" stampAt={50} captionAt={58} caption="BAR: EMPTY. ODDS: CORRECT." />
+        <BinaryBeat day="Friday" from={17 * 60} to={18 * 60 + 41} label="Kickoff happy hour" tag="FOOD" question="Happy hour runs dry before 7 PM?" seed="happy" y0={0.22} y1={0.94} winner="yes" stampAt={62} captionAt={70} caption="BAR: EMPTY. ODDS: CORRECT." />
       </Sequence>
       <Sequence {...seq(T.dinner)}>
-        <BinaryBeat day="Friday" from={19 * 60 + 2} to={19 * 60 + 31} label="Dinner watch" tag="FOOD" question="Will dinner arrive before 7:30 PM?" seed="dinner" y0={0.55} y1={0.04} winner="no" stampAt={44} captionAt={52} caption="IT ARRIVED AT 7:31." sub="the market knew" />
+        <BinaryBeat day="Friday" from={19 * 60 + 2} to={19 * 60 + 31} label="Dinner watch" tag="FOOD" question="Will dinner arrive before 7:30 PM?" seed="dinner" y0={0.55} y1={0.04} winner="no" stampAt={58} captionAt={66} caption="IT ARRIVED AT 7:31." sub="the market knew" />
       </Sequence>
       <Sequence {...seq(T.nap)}><NapScene /></Sequence>
       <Sequence {...seq(T.demo)}>
-        <BinaryBeat day="Saturday" from={16 * 60 + 31} to={16 * 60 + 58} label="Final demos" tag="CHAOS" question="Will a demo crash live on stage?" seed="demo" y0={0.71} y1={0.99} winner="yes" stampAt={50} captionAt={58} caption="“IT WORKED ON MY MACHINE.”" glitchAt={40} />
+        <BinaryBeat day="Saturday" from={16 * 60 + 31} to={16 * 60 + 58} label="Final demos" tag="CHAOS" question="Will a demo crash live on stage?" seed="demo" y0={0.71} y1={0.99} winner="yes" stampAt={62} captionAt={70} caption="“IT WORKED ON MY MACHINE.”" glitchAt={50} />
       </Sequence>
       <Sequence {...seq(T.board)}><BoardScene /></Sequence>
       <Sequence {...seq(T.end)}><EndScene /></Sequence>
