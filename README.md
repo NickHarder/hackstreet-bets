@@ -104,6 +104,19 @@ Measured with `npm run loadtest` after 1,500 past bets:
 | 60 | 2 | 9% | 6 ms |
 | 100 | 3 | 16% | 7 ms |
 
+## Promo video
+
+`promo/` holds a 20-second vertical (1080×1920) promo made with [Remotion](https://www.remotion.dev). It walks through the night in five bets: happy hour, dinner, the first nap, the demo crash and the leaderboard. It ends on a "Place your bets" card in the poster's gold and silver.
+
+```bash
+cd promo
+npm install
+npm run studio    # live preview in the browser, edit src/Promo.jsx
+npm run render    # writes out/hackstreet-bets-promo.mp4
+```
+
+The scene timings, jokes and odds are plain constants at the top of `promo/src/Promo.jsx`. The video has no soundtrack. Add music in any editor, or with Remotion's `<Audio>` component. Remotion is free for individuals and companies of up to 3 people. Larger companies need a [company license](https://www.remotion.pro/license).
+
 ## Under the hood
 
 - One Node + Express server with no database. State lives in `data/db.json`, saved after every change, so a restart loses nothing.

@@ -1,0 +1,17 @@
+{
+  "name": "hackstreet-bets-promo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "20-second promo video for HackStreet Bets at Champions vs. Challengers, made with Remotion",
+  "scripts": {
+    "studio": "remotion studio src/index.jsx",
+    "render": "remotion render src/index.jsx Promo out/hackstreet-bets-promo.mp4",
+    "still": "remotion still src/index.jsx Promo out/poster-frame.png --frame=560"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.538",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.538"
+  }
+}
