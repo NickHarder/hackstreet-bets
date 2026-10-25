@@ -40,7 +40,15 @@ const until = (t) => {
   if (s < 86400) { const h = Math.floor(s / 3600); const m = Math.round((s % 3600) / 60); return `${h}h ${m}m left`; }
   return `${Math.round(s / 86400)}d left`;
 };
-const fmtTime = (t) => new Date(t).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+// All times are shown in the event's time zone (Austin), so they match the
+// poster no matter what the viewer's laptop is set to.
+function tzOpt() {
+  const tz = S.settings.timeZone;
+  if (!tz) return {};
+  try { new Intl.DateTimeFormat(undefined, { timeZone: tz }); return { timeZone: tz }; } catch { return {}; }
+}
+const fmtDate = (t, o) => new Intl.DateTimeFormat(undefined, { ...o, ...tzOpt() }).format(new Date(t));
+const fmtTime = (t) => fmtDate(t, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 const initial = (name) => esc((name || '?').trim()[0] || '?');
 const avatar = (u, cls = '') => `<span class="avatar ${cls}" style="background:${esc(u?.color || '#555')}">${initial(u?.name)}</span>`;
 const statusPill = (m) => `<span class="pill ${m.status}">${{ open: 'Open', closed: 'Closed', resolved: 'Resolved', voided: 'Voided' }[m.status]}</span>`;
@@ -163,6 +171,7 @@ $('#suggestForm').addEventListener('submit', async (e) => {
 // ------------------------------------------------------------ top bar & ticker
 function renderTopbar() {
   $('#brand-event').textContent = S.settings.eventName || '';
+  updateCountdowns();
   document.title = `HackStreet Bets · ${S.settings.eventName || ''}`;
   $('#authStart').textContent = money(S.settings.startingBalance, { dp: 0 });
   $('#nav-admin').hidden = !S.me;
@@ -279,6 +288,57 @@ function featuredBlock(m) {
   </section>`;
 }
 
+// ---------- event hero + countdown
+function eventTitleHtml(name) {
+  const parts = String(name || '').split(/\s+vs\.?\s+/i);
+  if (parts.length === 2) return `<span class="gold-text">${esc(parts[0])}</span><span class="vs gold-text">VS.</span><span class="silver-text">${esc(parts[1])}</span>`;
+  return `<span class="solo gold-text">${esc(name)}</span>`;
+}
+function eventWhen() {
+  const { eventStart: a, eventEnd: b } = S.settings;
+  if (!a || !b) return '';
+  const mon = (t) => fmtDate(t, { month: 'short' }).toUpperCase();
+  const dnum = (t) => fmtDate(t, { day: 'numeric' });
+  const wday = (t) => fmtDate(t, { weekday: 'short' }).toUpperCase();
+  const hr = (t) => fmtDate(t, { hour: 'numeric', minute: Number(fmtDate(t, { minute: 'numeric' })) ? '2-digit' : undefined }).toUpperCase();
+  const sameDay = fmtDate(a, { dateStyle: 'short' }) === fmtDate(b, { dateStyle: 'short' });
+  const dates = sameDay ? `${mon(a)} ${dnum(a)}` : mon(a) === mon(b) ? `${mon(a)} ${dnum(a)}–${dnum(b)}` : `${mon(a)} ${dnum(a)} – ${mon(b)} ${dnum(b)}`;
+  return `<b>${dates}, ${fmtDate(b, { year: 'numeric' })}</b> · ${wday(a)} ${hr(a)} — ${wday(b)} ${hr(b)}`;
+}
+function countdownState() {
+  const { eventStart: a, eventEnd: b } = S.settings;
+  const now = Date.now();
+  if (!a || !b) return null;
+  const fmt = (ms) => {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    const d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return d ? `${d}D ${pad(h)}H ${pad(m)}M ${pad(sec)}S` : `${pad(h)}H ${pad(m)}M ${pad(sec)}S`;
+  };
+  if (now < a) return { live: false, html: `Kickoff in <b>${fmt(a - now)}</b>` };
+  if (now < b) return { live: true, html: `<span class="live-dot"></span> Live · hacking ends in <b>${fmt(b - now)}</b>` };
+  return { live: false, html: `That's a wrap. <b>Settle up.</b>` };
+}
+function updateCountdowns() {
+  const st = countdownState();
+  document.querySelectorAll('[data-countdown]').forEach((el) => {
+    if (!st) { el.hidden = true; return; }
+    el.hidden = false; el.classList.toggle('live', st.live);
+    if (el.innerHTML !== st.html) el.innerHTML = st.html;
+  });
+}
+setInterval(updateCountdowns, 1000);
+function heroPoster() {
+  const st = S.settings;
+  return `<section class="hero-poster" aria-label="${esc(st.eventName)}">
+    <div class="hp-kicker">HackStreet Bets · the official prediction market</div>
+    <h1 class="hp-title">${eventTitleHtml(st.eventName)}</h1>
+    ${st.tagline ? `<div class="hp-sub gold-text">${esc(st.tagline)}</div>` : ''}
+    <div class="hp-meta">${eventWhen()}${st.location ? ` · <b>${esc(st.location)}</b>` : ''}</div>
+    <div class="hp-row"><span class="countdown" data-countdown></span>${!S.me ? `<button class="btn primary" data-action="login">Get my ${money(st.startingBalance, { dp: 0 })} in play money</button>` : ''}</div>
+  </section>`;
+}
+
 function renderMarkets() {
   const all = [...S.markets.values()];
   const cats = ['All', 'Live', ...new Set(all.map((m) => m.category))];
@@ -293,7 +353,7 @@ function renderMarkets() {
   const doneList = list.filter((m) => m.status === 'resolved' || m.status === 'voided').sort((a, b) => (b.resolvedAt || 0) - (a.resolvedAt || 0));
 
   app.innerHTML = `
-    ${!S.me ? `<div class="card" style="margin-bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap"><span style="font-size:1.6rem">🎟️</span><div style="flex:1;min-width:200px"><b>Everyone starts with ${money(S.settings.startingBalance, { dp: 0 })} in play money.</b><div class="muted small">${esc(S.settings.tagline)}</div></div><button class="btn primary" data-action="login">Get my ${money(S.settings.startingBalance, { dp: 0 })}</button></div>` : ''}
+    ${heroPoster()}
     ${featured ? featuredBlock(featured) : ''}
     ${showLive ? `<div class="section-head"><h2><span class="live-badge"><span class="live-dot"></span></span> Happening now</h2><span class="muted small">Live side bets on the event itself</span></div>
       <div class="live-scroll">${live.map(marketCard).join('')}</div>` : ''}
@@ -306,6 +366,7 @@ function renderMarkets() {
       ${closedList.length ? `<h2 class="grid-title muted small">AWAITING RESULT</h2>${closedList.map(marketCard).join('')}` : ''}
       ${doneList.length ? `<h2 class="grid-title muted small">SETTLED</h2>${doneList.map(marketCard).join('')}` : ''}
     </div>`;
+  updateCountdowns();
   const s = $('#search');
   s.addEventListener('input', () => { S.query = s.value; const pos = s.selectionStart; renderMarkets(); const n = $('#search'); n.focus(); n.setSelectionRange(pos, pos); });
 }
@@ -593,15 +654,15 @@ function drawChart() {
   // grid (recessive hairlines) + right axis labels
   ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'middle';
   for (const g of [0, 0.25, 0.5, 0.75, 1]) {
-    ctx.strokeStyle = g === 0 ? '#383835' : '#2c2c2a'; ctx.lineWidth = 1;
+    ctx.strokeStyle = g === 0 ? '#3a352d' : '#25221d'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(pad.l, Math.round(y(g)) + 0.5); ctx.lineTo(pad.l + pw, Math.round(y(g)) + 0.5); ctx.stroke();
-    ctx.fillStyle = '#898781'; ctx.textAlign = 'left'; ctx.fillText(`${g * 100}%`, pad.l + pw + 8, y(g));
+    ctx.fillStyle = '#8c8577'; ctx.textAlign = 'left'; ctx.fillText(`${g * 100}%`, pad.l + pw + 8, y(g));
   }
   // time labels
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  const fmt = (t) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const fmt = (t) => fmtDate(t, { hour: 'numeric', minute: '2-digit' });
   const ticks = Math.max(2, Math.min(5, Math.floor(pw / 110)));
-  for (let k = 0; k <= ticks; k++) { const t = t0 + ((t1 - t0) * k) / ticks; ctx.fillStyle = '#898781'; ctx.textAlign = k === 0 ? 'left' : k === ticks ? 'right' : 'center'; ctx.fillText(fmt(t), x(t), pad.t + ph + 7); }
+  for (let k = 0; k <= ticks; k++) { const t = t0 + ((t1 - t0) * k) / ticks; ctx.fillStyle = '#8c8577'; ctx.textAlign = k === 0 ? 'left' : k === ticks ? 'right' : 'center'; ctx.fillText(fmt(t), x(t), pad.t + ph + 7); }
   // series: binary -> just "Yes"; multi -> all (2px stepped lines)
   const series = m.binary ? [0] : m.outcomes.map((_, i) => i);
   const order = series.slice().sort((a, b) => m.outcomes[a].price - m.outcomes[b].price); // leader drawn last (on top)
@@ -617,7 +678,7 @@ function drawChart() {
     }
     // end dot with surface ring
     const last = hist[hist.length - 1];
-    ctx.beginPath(); ctx.arc(x(last[0]), y(last[i + 1]), 4, 0, Math.PI * 2); ctx.fillStyle = o.color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#1a1a19'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x(last[0]), y(last[i + 1]), 4, 0, Math.PI * 2); ctx.fillStyle = o.color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#12110f'; ctx.stroke();
   }
   chartGeom = { hist, x, y, t0, t1, pad, pw, ph, series, m, W, H };
 }
@@ -633,11 +694,11 @@ function chartHover(e) {
   const pt = hist[k];
   drawChart();
   const ctx = canvas.getContext('2d');
-  ctx.strokeStyle = '#c3c2b7'; ctx.lineWidth = 1; ctx.setLineDash([]);
+  ctx.strokeStyle = '#c9c2b2'; ctx.lineWidth = 1; ctx.setLineDash([]);
   ctx.beginPath(); ctx.moveTo(Math.round(mx) + 0.5, pad.t); ctx.lineTo(Math.round(mx) + 0.5, pad.t + chartGeom.ph); ctx.stroke();
-  for (const i of series) { ctx.beginPath(); ctx.arc(mx, y(pt[i + 1]), 4, 0, Math.PI * 2); ctx.fillStyle = m.outcomes[i].color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#1a1a19'; ctx.stroke(); }
+  for (const i of series) { ctx.beginPath(); ctx.arc(mx, y(pt[i + 1]), 4, 0, Math.PI * 2); ctx.fillStyle = m.outcomes[i].color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#12110f'; ctx.stroke(); }
   const rows = series.map((i) => ({ o: m.outcomes[i], p: pt[i + 1] })).sort((a, b) => b.p - a.p);
-  tip.innerHTML = `<div class="tt">${new Date(t).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</div>${rows.map((rw) => `<div class="tr"><span class="nm"><span class="dot" style="background:${rw.o.color}"></span>${esc(rw.o.name)}</span><b>${pct(rw.p)}</b></div>`).join('')}`;
+  tip.innerHTML = `<div class="tt">${fmtTime(t)}</div>${rows.map((rw) => `<div class="tr"><span class="nm"><span class="dot" style="background:${rw.o.color}"></span>${esc(rw.o.name)}</span><b>${pct(rw.p)}</b></div>`).join('')}`;
   tip.hidden = false;
   const tw = tip.offsetWidth;
   tip.style.left = `${mx + 12 + tw > r.width ? mx - tw - 24 : mx}px`;
@@ -781,6 +842,10 @@ async function renderAdminBody() {
       <label class="span">Tagline<input name="tagline" value="${esc(s.tagline)}" maxlength="120"></label>
       <label class="span">🏆 Prize for 1st place<textarea name="prizeText" rows="3" maxlength="500">${esc(s.prizeText)}</textarea><span class="help">Shown at the top of the leaderboard. Ideas: the golden trophy, first pick of the swag table, the CEO does your standup for a week, a custom Slack emoji of your face, lunch on the organizers.</span></label>
       <label class="row span"><input type="checkbox" name="allowUserMarkets" ${s.allowUserMarkets ? 'checked' : ''}> Let players create their own markets <span class="help">(admins always can; only admins resolve or void)</span></label>
+      <label>Kickoff<input name="eventStart" type="datetime-local" value="${toLocalInput(s.eventStart)}"><span class="help">Drives the countdown on the home page.</span></label>
+      <label>Hacking ends<input name="eventEnd" type="datetime-local" value="${toLocalInput(s.eventEnd)}"></label>
+      <label>Location<input name="location" value="${esc(s.location || '')}" maxlength="60"></label>
+      <label>Event time zone<input name="timeZone" value="${esc(s.timeZone || '')}" maxlength="60" placeholder="America/Chicago"><span class="help">Every time on the site is shown in this zone. Kickoff and end above use your browser's zone.</span></label>
       <label>Starting balance for new players<input name="startingBalance" type="number" min="1" step="1" value="${s.startingBalance}"><span class="help">Only affects players who join after you change it.</span></label>
     </div><div style="margin-top:14px;display:flex;justify-content:flex-end"><button class="btn primary">Save settings</button></div></form>
     <div class="card danger-zone" style="margin-top:16px"><h3>Danger zone</h3><p class="muted small" style="margin-bottom:12px">Use before the real event to clear test data. Settings are kept either way.</p>
@@ -788,7 +853,7 @@ async function renderAdminBody() {
     $('#settingsForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = e.target;
-      try { const r = await api('/api/admin/settings', { method: 'PATCH', body: { eventName: f.eventName.value, currency: f.currency.value, tagline: f.tagline.value, prizeText: f.prizeText.value, startingBalance: Number(f.startingBalance.value), allowUserMarkets: f.allowUserMarkets.checked } }); S.settings = r.settings; renderTopbar(); toast('Settings saved.'); }
+      try { const r = await api('/api/admin/settings', { method: 'PATCH', body: { eventName: f.eventName.value, currency: f.currency.value, tagline: f.tagline.value, prizeText: f.prizeText.value, startingBalance: Number(f.startingBalance.value), allowUserMarkets: f.allowUserMarkets.checked, location: f.location.value, timeZone: f.timeZone.value, eventStart: fromLocalInput(f.eventStart.value), eventEnd: fromLocalInput(f.eventEnd.value) } }); S.settings = r.settings; renderTopbar(); toast('Settings saved.'); }
       catch (ex) { toast(esc(ex.message), 'err'); }
     });
   }

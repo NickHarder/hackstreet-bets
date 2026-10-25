@@ -1,4 +1,6 @@
-# HackStreet Bets 📈
+# HackStreet Bets
+
+The official prediction market for **Champions vs. Challengers**, Gauntlet's 24-hour AI hackathon: November 6–7, 2026, Friday 5 PM to Saturday 5 PM, Austin, TX.
 
 A Kalshi-style prediction market for your hackathon. Everyone gets play money, bets on which team wins and on whatever chaos happens during the event, and the leaderboard decides who has bragging rights.
 
@@ -49,7 +51,7 @@ Sign in like anyone else, open **Admin**, and enter the admin password. The defa
 - **Edit** renames outcomes at any time. Once teams form, rename the placeholder teams in "Which team wins the hackathon?".
 - **Players** lets you gift or dock play money, for example a bonus for best team name.
 - **Suggestions** collects market ideas from players when player-created markets are turned off. One click turns one into a market.
-- **Prize & settings** sets the event name, currency symbol, starting balance and the prize text on the leaderboard. It also has a switch to turn off player-created markets. When it's off, players can only send suggestions.
+- **Prize & settings** sets the event name, kickoff and end times, location, time zone, currency symbol, starting balance and the prize text on the leaderboard. It also has a switch to turn off player-created markets. When it's off, players can only send suggestions.
 - The danger zone resets markets and balances before the real event.
 
 ## Prize ideas for 1st place
@@ -71,7 +73,8 @@ Prices come from a logarithmic market scoring rule, the standard automated marke
 ## Before the event
 
 - Set your own `ADMIN_PASSWORD`. The default is `hackadmin`.
-- On the morning of the event, open Admin, then Prize & settings, and click **Reset markets + balances (keep players), and reload starter markets**. Starter markets close relative to when the server first started, so if you deployed days early the food bets will already be closed.
+- Check the event schedule in Admin, under Prize & settings. Kickoff, end, location and time zone drive the countdown, and every time on the site is shown in that time zone. The defaults match the poster.
+- Starter markets close on that schedule: happy hour and dinner bets close Friday evening, and team and demo bets close an hour before the end. If you change the schedule after the first start, use **Reset markets + balances (keep players), and reload starter markets** to re-anchor them. That also clears any test bets.
 - Never run `npm run demo` on the real server. If you did, use the same reset.
 - On a cloud host, attach a persistent volume, set `DATA_DIR` to it, and run exactly one instance.
 - Rename the placeholder teams and nap candidates.

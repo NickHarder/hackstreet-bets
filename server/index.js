@@ -9,10 +9,15 @@ import { PALETTE, starterPack, demoPack } from './seed.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
+// Binary (Yes/No) markets are drawn in the poster's colors: Champions gold vs. Challengers silver.
+const YES_COLOR = '#d9a54e';
+const NO_COLOR = '#c9ccd1';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'hackadmin';
 const DEMO = !!process.env.DEMO;
 
 let db = loadDb();
+// Older data files stored green/red for Yes/No; repaint them in the event's gold/silver.
+for (const m of Object.values(db.markets)) if (m.binary) { m.outcomes[0].color = YES_COLOR; m.outcomes[1].color = NO_COLOR; }
 
 // ---------------------------------------------------------------- caching
 // Every change to the data goes through persist()/persistNow(), which bumps
@@ -112,6 +117,8 @@ function normalizeOutcomes(input) {
   return names.map((n) => n.slice(0, 60));
 }
 
+const validColor = (c) => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : null);
+
 function createMarket(input, opts = {}) {
   const title = String(input.title || '').trim();
   if (title.length < 3 || title.length > 140) fail(400, 'Title must be 3-140 characters');
@@ -125,7 +132,7 @@ function createMarket(input, opts = {}) {
     id: uid(), title, description: String(input.description || '').slice(0, 2000),
     category: (String(input.category || '').trim().slice(0, 30)) || 'General',
     binary: isBinary,
-    outcomes: names.map((n, i) => ({ id: uid(), name: n, q: 0, color: isBinary ? (i === 0 ? '#199e70' : '#e66767') : PALETTE[i % PALETTE.length] })),
+    outcomes: names.map((n, i) => ({ id: uid(), name: n, q: 0, color: validColor(input.colors?.[i]) || (isBinary ? (i === 0 ? YES_COLOR : NO_COLOR) : PALETTE[i % PALETTE.length]) })),
     b, status: 'open', closesAt, featured: !!input.featured, live: !!input.live,
     createdAt: t, createdBy: opts.by || null, resolvedOutcomeId: null, resolvedAt: null,
     volume: 0, tradeCount: 0, lastTradeAt: null, history: [], flags: [],
@@ -596,7 +603,7 @@ app.patch('/api/admin/markets/:id', requireAdmin, (req, res) => {
     } else if (m.tradeCount === 0) {
       const isBinary = names.length === 2 && names[0].toLowerCase() === 'yes' && names[1].toLowerCase() === 'no';
       m.binary = isBinary;
-      m.outcomes = names.map((n, i) => ({ id: uid(), name: n, q: 0, color: isBinary ? (i === 0 ? '#199e70' : '#e66767') : PALETTE[i % PALETTE.length] }));
+      m.outcomes = names.map((n, i) => ({ id: uid(), name: n, q: 0, color: isBinary ? (i === 0 ? YES_COLOR : NO_COLOR) : PALETTE[i % PALETTE.length] }));
       m.history = [];
       pushHistory(m, now(), lmsrPrices(qsOf(m), m.b));
     } else fail(400, 'You can rename outcomes, but not add or remove them after trading has started');
@@ -665,13 +672,26 @@ app.delete('/api/admin/markets/:id', requireAdmin, (req, res) => {
 
 app.patch('/api/admin/settings', requireAdmin, (req, res) => {
   const b = req.body || {};
-  const s = db.settings;
+  // Work on a copy and only swap it in once everything validates, so a bad
+  // field can never leave half-applied settings behind.
+  const s = { ...db.settings };
   if (b.eventName !== undefined) s.eventName = String(b.eventName).trim().slice(0, 60) || s.eventName;
   if (b.tagline !== undefined) s.tagline = String(b.tagline).trim().slice(0, 120);
   if (b.prizeText !== undefined) s.prizeText = String(b.prizeText).trim().slice(0, 500);
   if (b.allowUserMarkets !== undefined) s.allowUserMarkets = !!b.allowUserMarkets;
+  if (b.location !== undefined) s.location = String(b.location).trim().slice(0, 60);
+  if (b.timeZone !== undefined) {
+    const tz = String(b.timeZone).trim();
+    try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); } catch { fail(400, 'Unknown time zone. Use a name like America/Chicago'); }
+    s.timeZone = tz;
+  }
+  for (const k of ['eventStart', 'eventEnd']) {
+    if (b[k] !== undefined) { const t = Number(b[k]); if (!Number.isFinite(t) || t <= 0) fail(400, 'Pick a valid event time'); s[k] = t; }
+  }
+  if (s.eventEnd <= s.eventStart) fail(400, 'The event has to end after it starts');
   if (b.currency !== undefined) s.currency = String(b.currency).trim().slice(0, 4) || '$';
   if (b.startingBalance !== undefined) { const n = Number(b.startingBalance); if (!(n >= 1 && n <= 1e7)) fail(400, 'Starting balance must be between 1 and 10,000,000'); s.startingBalance = round2(n); }
+  db.settings = s;
   persist(db);
   broadcast({ type: 'settings', settings: s });
   res.json({ settings: s });

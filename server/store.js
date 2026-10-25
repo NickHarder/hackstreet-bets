@@ -10,8 +10,13 @@ export const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 export function defaultSettings() {
   return {
-    eventName: 'Hackathon 2026',
-    tagline: 'Fake money. Real bragging rights.',
+    eventName: 'Champions vs. Challengers',
+    tagline: 'The Return vs. The Rise. Fake money, real bragging rights.',
+    location: 'Austin, TX',
+    timeZone: 'America/Chicago', // every time on the site is shown in the event's local time
+    // Friday Nov 6, 2026 5:00 PM to Saturday Nov 7, 5:00 PM, Austin time (CST).
+    eventStart: Date.parse('2026-11-06T17:00:00-06:00'),
+    eventEnd: Date.parse('2026-11-07T17:00:00-06:00'),
     prizeText: 'First place on the leaderboard when the hackathon ends wins eternal bragging rights (and a prize the organizers will announce).',
     startingBalance: 1000,
     currency: '$',

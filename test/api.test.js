@@ -296,6 +296,45 @@ describe('leaderboard and live data', () => {
   });
 });
 
+describe('event theme and schedule', () => {
+  test('defaults match the Champions vs. Challengers poster', async () => {
+    const { settings } = await new Client(base).get('/api/bootstrap');
+    assert.equal(settings.eventName, 'Champions vs. Challengers');
+    assert.equal(settings.location, 'Austin, TX');
+    assert.equal(settings.timeZone, 'America/Chicago');
+    assert.equal(new Date(settings.eventStart).toISOString(), '2026-11-06T23:00:00.000Z', 'Fri Nov 6, 5 PM in Austin');
+    assert.equal(settings.eventEnd - settings.eventStart, 24 * 3600e3, '24 hours');
+  });
+
+  test('admins can change the schedule but not break it', async () => {
+    const admin = await player(base, 'sched_admin'); await admin.makeAdmin();
+    const { settings } = await admin.get('/api/bootstrap');
+    assert.equal((await admin.patch('/api/admin/settings', { timeZone: 'Mars/Olympus_Mons' })).status, 400);
+    assert.equal((await admin.patch('/api/admin/settings', { eventEnd: settings.eventStart - 1 })).status, 400);
+    const r = await admin.patch('/api/admin/settings', { location: 'Austin, TX (HQ)', timeZone: 'America/New_York' });
+    assert.equal(r.status, 200);
+    assert.equal(r.settings.timeZone, 'America/New_York');
+    await admin.patch('/api/admin/settings', { location: settings.location, timeZone: settings.timeZone });
+  });
+
+  test('Yes/No markets are drawn gold vs. silver', async () => {
+    const c = await player(base, 'colors');
+    const m = await openBinary(c, 'Theme test: gold and silver?');
+    assert.deepEqual(m.outcomes.map((o) => o.color), ['#d9a54e', '#c9ccd1']);
+  });
+
+  test('starter markets close on the real event schedule, not relative to server start', async () => {
+    const { markets, settings } = await new Client(base).get('/api/bootstrap');
+    const byTitle = (t) => markets.find((m) => m.title === t);
+    const H = 3600e3;
+    if (settings.eventStart > Date.now() + H) {
+      assert.equal(byTitle('Will dinner arrive before 7:30 PM Friday?').closesAt, settings.eventStart + 2 * H);
+      assert.equal(byTitle('Which team wins the hackathon?').closesAt, settings.eventEnd - H);
+    }
+    assert.ok(byTitle('Champions or Challengers: whose team takes first place?'), 'the sides market exists');
+  });
+});
+
 describe('server lifecycle', () => {
   test('data survives a restart', async () => {
     const s1 = await startServer();
